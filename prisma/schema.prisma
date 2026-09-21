@@ -1,0 +1,437 @@
+// Schema do Sistema de Gestão de Orientações (TCC, Mestrado e Doutorado)
+// Ver documento de requisitos: requisitos-sistema-orientacao.md
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PapelUsuario {
+  PROFESSOR
+  ALUNO
+  COORIENTADOR
+}
+
+enum NivelAluno {
+  TCC
+  MESTRADO
+  DOUTORADO
+}
+
+enum StatusAluno {
+  OK
+  ATENCAO
+  CRITICO
+}
+
+enum StatusReuniao {
+  AGENDADA
+  REALIZADA
+  CANCELADA
+  FALTA
+}
+
+enum StatusResumo {
+  RASCUNHO
+  PUBLICADO
+}
+
+enum StatusTarefa {
+  ABERTA
+  CONCLUIDA
+}
+
+enum TipoNota {
+  PRIVADA
+  COMPARTILHADA
+}
+
+enum StatusProducao {
+  EM_ESCRITA
+  SUBMETIDO
+  EM_REVISAO
+  ACEITO
+  PUBLICADO
+}
+
+enum TipoAlerta {
+  DIAS_SEM_REUNIAO
+  TAREFA_ATRASADA
+  PRAZO_PROXIMO
+  FALTA_SEM_AVISO
+  CHECKIN_NAO_PREENCHIDO
+}
+
+enum ProvedorIA {
+  CLAUDE
+  GEMINI
+}
+
+model Usuario {
+  id                       String       @id @default(cuid())
+  nome                     String
+  email                    String       @unique
+  senhaHash                String?
+  papel                    PapelUsuario
+  tokenRecuperacao         String?      @unique
+  tokenRecuperacaoExpiraEm DateTime?
+  criadoEm                 DateTime     @default(now())
+  atualizadoEm             DateTime     @updatedAt
+
+  aluno            Aluno?               @relation("UsuarioAluno")
+  alunosOrientados Aluno[]              @relation("ProfessorAlunos")
+  convitesCriados  Convite[]            @relation("ProfessorConvites")
+  conexaoGoogle    ConexaoGoogle?
+  logsAuditoria    LogAuditoria[]
+  coorientacoes    Coorientacao[]
+  configAlertas    ConfiguracaoAlerta[]
+  resumos          Resumo[]
+
+  @@map("usuario")
+}
+
+model Convite {
+  id       String     @id @default(cuid())
+  email    String
+  token    String     @unique
+  nivel    NivelAluno
+  usadoEm  DateTime?
+  expiraEm DateTime
+  criadoEm DateTime   @default(now())
+
+  professor   Usuario @relation("ProfessorConvites", fields: [professorId], references: [id])
+  professorId String
+
+  aluno   Aluno  @relation(fields: [alunoId], references: [id], onDelete: Cascade)
+  alunoId String @unique
+
+  @@map("convite")
+}
+
+model AceiteCiencia {
+  id       String   @id @default(cuid())
+  aceitoEm DateTime @default(now())
+  versao   String   @default("1.0")
+
+  aluno   Aluno  @relation(fields: [alunoId], references: [id], onDelete: Cascade)
+  alunoId String @unique
+
+  @@map("aceite_ciencia")
+}
+
+model Aluno {
+  id                     String       @id @default(cuid())
+  nome                   String
+  email                  String       @unique
+  nivel                  NivelAluno
+  tema                   String?
+  dataInicio             DateTime
+  statusManual           StatusAluno?
+  arquivado              Boolean      @default(false)
+  bemEstarAtivo          Boolean      @default(true)
+  exportacaoSolicitadaEm DateTime?
+  exclusaoSolicitadaEm   DateTime?
+  criadoEm               DateTime     @default(now())
+  atualizadoEm           DateTime     @updatedAt
+
+  usuario   Usuario? @relation("UsuarioAluno", fields: [usuarioId], references: [id])
+  usuarioId String?  @unique
+
+  orientador   Usuario @relation("ProfessorAlunos", fields: [orientadorId], references: [id])
+  orientadorId String
+
+  convite Convite?
+
+  aceiteCiencia  AceiteCiencia?
+  horariosFixos  HorarioFixo[]
+  reunioes       Reuniao[]
+  tarefas        Tarefa[]
+  notas          Nota[]
+  marcos         Marco[]
+  entregas       Entrega[]
+  producoes      ProducaoAcademica[]
+  bemEstar       BemEstar[]
+  alertas        Alerta[]
+  coorientadores Coorientacao[]
+
+  @@map("aluno")
+}
+
+model Coorientacao {
+  id       String   @id @default(cuid())
+  criadoEm DateTime @default(now())
+
+  aluno   Aluno  @relation(fields: [alunoId], references: [id], onDelete: Cascade)
+  alunoId String
+
+  coorientador   Usuario @relation(fields: [coorientadorId], references: [id])
+  coorientadorId String
+
+  @@unique([alunoId, coorientadorId])
+  @@map("coorientacao")
+}
+
+model HorarioLivre {
+  id          String   @id @default(cuid())
+  professorId String
+  inicio      DateTime
+  fim         DateTime
+  recorrente  Boolean  @default(false)
+  diaSemana   Int?
+  reservado   Boolean  @default(false)
+  criadoEm    DateTime @default(now())
+
+  reuniao Reuniao?
+
+  @@map("horario_livre")
+}
+
+model HorarioFixo {
+  id         String   @id @default(cuid())
+  diaSemana  Int
+  horaInicio String
+  horaFim    String
+  ativo      Boolean  @default(true)
+  criadoEm   DateTime @default(now())
+
+  aluno   Aluno  @relation(fields: [alunoId], references: [id], onDelete: Cascade)
+  alunoId String
+
+  @@map("horario_fixo")
+}
+
+model Reuniao {
+  id              String        @id @default(cuid())
+  data            DateTime
+  pauta           String?
+  status          StatusReuniao @default(AGENDADA)
+  falta           Boolean       @default(false)
+  googleEventId   String?
+  meetLink        String?
+  lembreteEnviado Boolean       @default(false)
+  criadoEm        DateTime      @default(now())
+  atualizadoEm    DateTime      @updatedAt
+
+  aluno   Aluno  @relation(fields: [alunoId], references: [id], onDelete: Cascade)
+  alunoId String
+
+  horarioLivre   HorarioLivre? @relation(fields: [horarioLivreId], references: [id])
+  horarioLivreId String?       @unique
+
+  checkin     Checkin?
+  transcricao Transcricao?
+  resumo      Resumo?
+  tarefas     Tarefa[]
+  notas       Nota[]
+
+  @@map("reuniao")
+}
+
+model Checkin {
+  id           String    @id @default(cuid())
+  oQueFez      String?
+  duvidas      String?
+  bloqueios    String?
+  preenchidoEm DateTime?
+  criadoEm     DateTime  @default(now())
+
+  reuniao   Reuniao @relation(fields: [reuniaoId], references: [id], onDelete: Cascade)
+  reuniaoId String  @unique
+
+  @@map("checkin")
+}
+
+model Transcricao {
+  id            String   @id @default(cuid())
+  conteudo      String
+  origemArquivo String?
+  criadoEm      DateTime @default(now())
+
+  reuniao   Reuniao @relation(fields: [reuniaoId], references: [id], onDelete: Cascade)
+  reuniaoId String  @unique
+
+  @@map("transcricao")
+}
+
+model Resumo {
+  id                   String       @id @default(cuid())
+  status               StatusResumo @default(RASCUNHO)
+  decisoes             String?
+  combinados           String?
+  duvidasAbertas       String?
+  proximosPassos       String?
+  tarefasPropostasJson String?
+  versao               Int          @default(1)
+  provedorIA           ProvedorIA?
+  publicadoEm          DateTime?
+  criadoEm             DateTime     @default(now())
+  atualizadoEm         DateTime     @updatedAt
+
+  autor   Usuario? @relation(fields: [autorId], references: [id])
+  autorId String?
+
+  reuniao   Reuniao @relation(fields: [reuniaoId], references: [id], onDelete: Cascade)
+  reuniaoId String  @unique
+
+  @@map("resumo")
+}
+
+model Tarefa {
+  id           String       @id @default(cuid())
+  titulo       String
+  descricao    String?
+  responsavel  String?
+  prazo        DateTime?
+  status       StatusTarefa @default(ABERTA)
+  concluidaEm  DateTime?
+  criadoEm     DateTime     @default(now())
+  atualizadoEm DateTime     @updatedAt
+
+  aluno   Aluno  @relation(fields: [alunoId], references: [id], onDelete: Cascade)
+  alunoId String
+
+  reuniao   Reuniao? @relation(fields: [reuniaoId], references: [id], onDelete: SetNull)
+  reuniaoId String?
+
+  @@map("tarefa")
+}
+
+model Nota {
+  id       String   @id @default(cuid())
+  conteudo String
+  tipo     TipoNota
+  criadoEm DateTime @default(now())
+
+  aluno   Aluno  @relation(fields: [alunoId], references: [id], onDelete: Cascade)
+  alunoId String
+
+  reuniao   Reuniao? @relation(fields: [reuniaoId], references: [id], onDelete: SetNull)
+  reuniaoId String?
+
+  @@map("nota")
+}
+
+model Marco {
+  id            String    @id @default(cuid())
+  titulo        String
+  dataPrevista  DateTime
+  dataConcluida DateTime?
+  concluido     Boolean   @default(false)
+  criadoEm      DateTime  @default(now())
+
+  aluno   Aluno  @relation(fields: [alunoId], references: [id], onDelete: Cascade)
+  alunoId String
+
+  @@map("marco")
+}
+
+model Entrega {
+  id       String   @id @default(cuid())
+  titulo   String
+  criadoEm DateTime @default(now())
+
+  aluno   Aluno  @relation(fields: [alunoId], references: [id], onDelete: Cascade)
+  alunoId String
+
+  versoes VersaoEntrega[]
+
+  @@map("entrega")
+}
+
+model VersaoEntrega {
+  id         String   @id @default(cuid())
+  link       String?
+  arquivoUrl String?
+  feedback   String?
+  criadoEm   DateTime @default(now())
+
+  entrega   Entrega @relation(fields: [entregaId], references: [id], onDelete: Cascade)
+  entregaId String
+
+  @@map("versao_entrega")
+}
+
+model ProducaoAcademica {
+  id             String         @id @default(cuid())
+  titulo         String
+  venue          String?
+  status         StatusProducao @default(EM_ESCRITA)
+  prazoSubmissao DateTime?
+  criadoEm       DateTime       @default(now())
+  atualizadoEm   DateTime       @updatedAt
+
+  aluno   Aluno  @relation(fields: [alunoId], references: [id], onDelete: Cascade)
+  alunoId String
+
+  @@map("producao_academica")
+}
+
+model BemEstar {
+  id       String   @id @default(cuid())
+  nivel    Int
+  criadoEm DateTime @default(now())
+
+  aluno   Aluno  @relation(fields: [alunoId], references: [id], onDelete: Cascade)
+  alunoId String
+
+  @@map("bem_estar")
+}
+
+model Alerta {
+  id        String     @id @default(cuid())
+  tipo      TipoAlerta
+  mensagem  String
+  resolvido Boolean    @default(false)
+  criadoEm  DateTime   @default(now())
+
+  aluno   Aluno  @relation(fields: [alunoId], references: [id], onDelete: Cascade)
+  alunoId String
+
+  @@map("alerta")
+}
+
+model ConfiguracaoAlerta {
+  id          String     @id @default(cuid())
+  nivel       NivelAluno
+  diasAtencao Int        @default(14)
+  diasCritico Int        @default(30)
+
+  professor   Usuario @relation(fields: [professorId], references: [id])
+  professorId String
+
+  @@unique([professorId, nivel])
+  @@map("configuracao_alerta")
+}
+
+model LogAuditoria {
+  id         String   @id @default(cuid())
+  acao       String
+  entidade   String
+  entidadeId String?
+  detalhes   String?
+  criadoEm   DateTime @default(now())
+
+  usuario   Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuarioId String
+
+  @@map("log_auditoria")
+}
+
+model ConexaoGoogle {
+  id                  String   @id @default(cuid())
+  accessTokenCifrado  String
+  refreshTokenCifrado String
+  expiraEm            DateTime
+  conectado           Boolean  @default(true)
+  criadoEm            DateTime @default(now())
+  atualizadoEm        DateTime @updatedAt
+
+  professor   Usuario @relation(fields: [professorId], references: [id])
+  professorId String  @unique
+
+  @@map("conexao_google")
+}
