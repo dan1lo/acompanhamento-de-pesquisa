@@ -8,19 +8,30 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-karla: var(--font-karla);
+  --font-spectral: var(--font-spectral);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-spectral), Georgia, serif;
 }
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-karla), sans-serif;
+}
+
+.font-karla {
+  font-family: var(--font-karla), sans-serif;
+}
+
+.font-spectral {
+  font-family: var(--font-spectral), Georgia, serif;
+}
+

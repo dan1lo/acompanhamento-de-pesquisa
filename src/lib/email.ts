@@ -6,7 +6,7 @@ function getClient() {
   return new Resend(apiKey);
 }
 
-const FROM = process.env.EMAIL_FROM || "Orientação <onboarding@resend.dev>";
+const FROM = process.env.EMAIL_FROM || "Scholab <onboarding@resend.dev>";
 
 async function enviar(to: string, subject: string, html: string) {
   const client = getClient();
