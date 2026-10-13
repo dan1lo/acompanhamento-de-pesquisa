@@ -361,6 +361,8 @@ model ProducaoAcademica {
   venue          String?
   status         StatusProducao @default(EM_ESCRITA)
   prazoSubmissao DateTime?
+  googleDocsUrl  String?
+  conteudo       String?        @db.Text
   criadoEm       DateTime       @default(now())
   atualizadoEm   DateTime       @updatedAt
 

@@ -13,7 +13,7 @@ export default async function ReunioesAlunoPage() {
   });
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 max-w-4xl mx-auto">
       <h1 className="text-lg font-semibold">Minhas reuniões</h1>
 
       <ul className="space-y-3">

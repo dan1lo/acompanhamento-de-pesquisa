@@ -11,7 +11,7 @@ export default async function AgendarPage() {
   const horarios = await listarHorariosDisponiveis(aluno.orientadorId);
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 max-w-4xl mx-auto">
       <h1 className="text-lg font-semibold">Agendar reunião</h1>
       <p className="text-sm text-zinc-500">
         Escolha um dos horários livres do seu orientador. Agendamentos precisam de pelo menos 24h de

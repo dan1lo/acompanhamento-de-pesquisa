@@ -10,6 +10,7 @@ interface TopbarHeaderProps {
   userEmail?: string | null;
   userImage?: string | null;
   role?: "PROFESSOR" | "ALUNO" | "COORIENTADOR";
+  centerTitle?: string | null;
 }
 
 const PROFESSOR_LINKS_PRINCIPAIS = [
@@ -131,9 +132,12 @@ export function TopbarHeader({
   userEmail,
   userImage,
   role = "PROFESSOR",
+  centerTitle,
 }: TopbarHeaderProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
+
+  const activeCenterTitle = centerTitle ?? (pathname === "/producao" ? "Suas Produções" : null);
 
   const isAluno = role === "ALUNO";
   const homeHref = isAluno ? "/inicio" : "/painel";
@@ -167,9 +171,9 @@ export function TopbarHeader({
     <>
       {/* Topbar com fundo verde escuro (#133C1B), altura h-16 e texto branco */}
       <header className="sticky top-0 z-30 w-full border-b border-black/10 bg-[#133C1B] text-white shadow-sm">
-        <div className="flex h-16 w-full items-center justify-between px-4 sm:px-6">
+        <div className="relative flex h-16 w-full items-center justify-between px-4 sm:px-6">
           {/* Canto esquerdo: ícone para abrir a sidebar + SCHOLAB em Caps Lock */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 z-10">
             <button
               onClick={() => setSidebarOpen(true)}
               className="inline-flex items-center justify-center rounded-lg p-2 text-white transition-colors hover:bg-white/10 active:scale-95 focus:outline-none focus:ring-2 focus:ring-white/30 cursor-pointer"
@@ -195,8 +199,17 @@ export function TopbarHeader({
             </Link>
           </div>
 
+          {/* Centro da topbar: Título da página */}
+          {activeCenterTitle && (
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-none text-center px-4 max-w-[calc(100%-180px)] sm:max-w-md">
+              <h1 className="text-base sm:text-lg md:text-xl font-bold tracking-wide text-white font-karla truncate">
+                {activeCenterTitle}
+              </h1>
+            </div>
+          )}
+
           {/* Canto direito: Notificações (Sino) + Foto de perfil / Avatar */}
-          <div className="flex items-center gap-2 sm:gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 z-10">
             {/* Ícone de sino com popup hover de notificações */}
             <div className="relative group">
               <Link

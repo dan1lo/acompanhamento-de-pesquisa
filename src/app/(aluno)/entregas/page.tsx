@@ -15,7 +15,7 @@ export default async function EntregasAlunoPage() {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-4xl mx-auto">
       <h1 className="text-lg font-semibold">Entregas</h1>
 
       <section className="rounded-lg border border-zinc-200 bg-white p-4">

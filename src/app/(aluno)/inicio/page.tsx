@@ -16,7 +16,7 @@ export default async function InicioAlunoPage() {
   });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-4xl mx-auto">
       <h1 className="text-lg font-semibold">Olá, {aluno.nome.split(" ")[0]}</h1>
 
       <section className="rounded-lg border border-zinc-200 bg-white p-4">
