@@ -137,7 +137,7 @@ export function TopbarHeader({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
 
-  const activeCenterTitle = centerTitle ?? (pathname === "/producao" ? "Suas Produções" : null);
+  const activeCenterTitle = centerTitle ?? (pathname === "/producao" ? "Suas Produções" : pathname === "/painel" ? "Painel de Orientandos" : null);
 
   const isAluno = role === "ALUNO";
   const homeHref = isAluno ? "/inicio" : "/painel";

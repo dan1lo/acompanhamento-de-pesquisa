@@ -21,6 +21,9 @@ export async function listarAlunosComStatus(professorId: string, incluirArquivad
           orderBy: { data: "desc" },
           take: 1,
         },
+        _count: {
+          select: { producoes: true },
+        },
       },
     }),
     prisma.configuracaoAlerta.findMany({ where: { professorId } }),
@@ -43,6 +46,7 @@ export async function listarAlunosComStatus(professorId: string, incluirArquivad
       diasSemReuniao: dias,
       statusSugerido: sugerido,
       statusEfetivo: efetivo,
+      quantidadeArtigos: aluno._count?.producoes ?? 0,
     };
   });
 }

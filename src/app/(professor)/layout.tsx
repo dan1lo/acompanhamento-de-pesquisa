@@ -11,7 +11,7 @@ export default async function ProfessorLayout({ children }: { children: React.Re
         userEmail={professor.email}
         userImage={(professor as { image?: string | null }).image}
       />
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-6">{children}</main>
+      <main className="w-full flex-1 px-4 sm:px-6 lg:px-8 py-6 sm:py-8 font-spectral">{children}</main>
     </div>
   );
 }
