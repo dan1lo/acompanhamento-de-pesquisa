@@ -9,9 +9,10 @@ interface TopbarHeaderProps {
   userName?: string | null;
   userEmail?: string | null;
   userImage?: string | null;
+  role?: "PROFESSOR" | "ALUNO" | "COORIENTADOR";
 }
 
-const LINKS_PRINCIPAIS = [
+const PROFESSOR_LINKS_PRINCIPAIS = [
   { href: "/painel", label: "Painel" },
   { href: "/fila", label: "Quem contatar hoje" },
   { href: "/alertas", label: "Alertas" },
@@ -20,15 +21,37 @@ const LINKS_PRINCIPAIS = [
   { href: "/horarios", label: "Horários" },
 ];
 
-const LINKS_CONFIG = [
+const PROFESSOR_LINKS_CONFIG = [
   { href: "/configuracoes/google", label: "Google Calendar" },
   { href: "/configuracoes/alertas", label: "Config. alertas" },
   { href: "/coorientadores", label: "Coorientadores" },
 ];
 
-export function TopbarHeader({ userName, userEmail, userImage }: TopbarHeaderProps) {
+const ALUNO_LINKS_PRINCIPAIS = [
+  { href: "/inicio", label: "Início" },
+  { href: "/agendar", label: "Agendar reunião" },
+  { href: "/reunioes", label: "Minhas reuniões" },
+  { href: "/entregas", label: "Entregas" },
+  { href: "/producao", label: "Produção científica" },
+];
+
+const ALUNO_LINKS_CONFIG = [
+  { href: "/privacidade", label: "Privacidade e Dados" },
+];
+
+export function TopbarHeader({
+  userName,
+  userEmail,
+  userImage,
+  role = "PROFESSOR",
+}: TopbarHeaderProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
+
+  const isAluno = role === "ALUNO";
+  const homeHref = isAluno ? "/inicio" : "/painel";
+  const linksPrincipais = isAluno ? ALUNO_LINKS_PRINCIPAIS : PROFESSOR_LINKS_PRINCIPAIS;
+  const linksConfig = isAluno ? ALUNO_LINKS_CONFIG : PROFESSOR_LINKS_CONFIG;
 
   // Fechar sidebar com ESC
   useEffect(() => {
@@ -55,8 +78,8 @@ export function TopbarHeader({ userName, userEmail, userImage }: TopbarHeaderPro
 
   return (
     <>
-      {/* Topbar com fundo cinza escuro esverdeado (#475838), altura h-16 e texto branco */}
-      <header className="sticky top-0 z-30 w-full border-b border-black/10 bg-[#475838] text-white shadow-sm">
+      {/* Topbar com fundo verde escuro (#133C1B), altura h-16 e texto branco */}
+      <header className="sticky top-0 z-30 w-full border-b border-black/10 bg-[#133C1B] text-white shadow-sm">
         <div className="flex h-16 w-full items-center justify-between px-4 sm:px-6">
           {/* Canto esquerdo: ícone para abrir a sidebar + SCHOLAB em Caps Lock */}
           <div className="flex items-center gap-3">
@@ -78,7 +101,7 @@ export function TopbarHeader({ userName, userEmail, userImage }: TopbarHeaderPro
             </button>
 
             <Link
-              href="/painel"
+              href={homeHref}
               className="text-lg font-bold tracking-wider text-white hover:opacity-90 font-karla transition-opacity"
             >
               SCHOLAB
@@ -129,10 +152,11 @@ export function TopbarHeader({ userName, userEmail, userImage }: TopbarHeaderPro
 
             {/* Canto direito: foto de perfil / ícone redondo com menu hover */}
             <div className="relative group">
-              <button
-                type="button"
+              <Link
+                href="/perfil"
                 className="flex items-center justify-center rounded-full focus:outline-none transition-transform hover:scale-105 active:scale-95 cursor-pointer"
-                aria-label="Menu do usuário"
+                aria-label="Meu Perfil"
+                title="Meu Perfil"
               >
                 {userImage ? (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -159,25 +183,25 @@ export function TopbarHeader({ userName, userEmail, userImage }: TopbarHeaderPro
                     </svg>
                   </div>
                 )}
-              </button>
+              </Link>
 
-              {/* Menu suspenso no hover com: Perfil, Configurações e Sair */}
+              {/* Menu suspenso no hover com: Perfil/Privacidade e Sair */}
               <div className="absolute right-0 top-full pt-2 opacity-0 invisible pointer-events-none group-hover:opacity-100 group-hover:visible group-hover:pointer-events-auto transition-all duration-200 z-50">
-                <div className="w-52 rounded-xl border border-zinc-200 bg-white p-1.5 text-zinc-900 shadow-xl ring-1 ring-black/5">
-                  {(userName || userEmail) && (
-                    <div className="border-b border-zinc-100 px-3 py-2 mb-1">
-                      {userName && (
-                        <p className="truncate text-xs font-semibold text-zinc-900">{userName}</p>
-                      )}
-                      {userEmail && (
-                        <p className="truncate text-[11px] text-zinc-500">{userEmail}</p>
-                      )}
+                <div className="w-56 rounded-xl border border-zinc-200 bg-white p-1.5 text-zinc-900 shadow-xl ring-1 ring-black/5">
+                  <div className="border-b border-zinc-100 px-3 py-2 mb-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate text-xs font-semibold text-zinc-900 font-karla">
+                        {userName || "Usuário"}
+                      </span>
+                      <span className="shrink-0 text-[10px] font-bold tracking-wider px-2 py-0.5 rounded-full bg-[#133C1B]/10 text-[#133C1B] border border-[#133C1B]/15 font-karla">
+                        {isAluno ? "Aluno" : "Orientador"}
+                      </span>
                     </div>
-                  )}
+                  </div>
 
                   {/* Perfil */}
                   <Link
-                    href="/configuracoes/google"
+                    href="/perfil"
                     className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
                   >
                     <svg
@@ -198,7 +222,7 @@ export function TopbarHeader({ userName, userEmail, userImage }: TopbarHeaderPro
 
                   {/* Configurações */}
                   <Link
-                    href="/configuracoes/alertas"
+                    href={isAluno ? "/privacidade" : "/configuracoes/alertas"}
                     className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
                   >
                     <svg
@@ -260,16 +284,16 @@ export function TopbarHeader({ userName, userEmail, userImage }: TopbarHeaderPro
         aria-hidden="true"
       />
 
-      {/* Sidebar 100% verde (#475838), sem divisão de barra no topo */}
+      {/* Sidebar 100% verde (#133C1B), sem divisão de barra no topo */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-[#475838] text-white shadow-2xl transition-transform duration-300 ease-in-out ${
+        className={`fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-[#133C1B] text-white shadow-2xl transition-transform duration-300 ease-in-out ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        {/* Topo da sidebar integrado (100% verde, sem borda de corte) */}
+        {/* Topo da sidebar integrado */}
         <div className="flex h-16 items-center justify-between px-5">
           <span className="text-xs font-semibold uppercase tracking-wider text-white/70 font-karla">
-            Menu
+            Menu do {isAluno ? "Aluno" : "Orientador"}
           </span>
           <button
             onClick={() => setSidebarOpen(false)}
@@ -291,10 +315,10 @@ export function TopbarHeader({ userName, userEmail, userImage }: TopbarHeaderPro
         <nav className="flex-1 space-y-6 overflow-y-auto px-3 py-3 text-sm">
           <div>
             <div className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-white/50 font-karla">
-              Menu Principal
+              {isAluno ? "Navegação" : "Menu Principal"}
             </div>
             <div className="space-y-1">
-              {LINKS_PRINCIPAIS.map((item) => {
+              {linksPrincipais.map((item) => {
                 const ativo = pathname === item.href;
                 return (
                   <Link
@@ -316,10 +340,10 @@ export function TopbarHeader({ userName, userEmail, userImage }: TopbarHeaderPro
 
           <div>
             <div className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-white/50 font-karla">
-              Configurações
+              {isAluno ? "Opções" : "Configurações"}
             </div>
             <div className="space-y-1">
-              {LINKS_CONFIG.map((item) => {
+              {linksConfig.map((item) => {
                 const ativo = pathname === item.href;
                 return (
                   <Link

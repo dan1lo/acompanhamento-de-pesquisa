@@ -7,5 +7,7 @@ export default async function Home() {
   if (!session?.user) redirect("/login");
   if (session.user.papel === "PROFESSOR") redirect("/painel");
   if (session.user.papel === "COORIENTADOR") redirect("/co/painel");
+  if (session.user.papel === "ALUNO") redirect("/inicio");
+
   redirect("/inicio");
 }
