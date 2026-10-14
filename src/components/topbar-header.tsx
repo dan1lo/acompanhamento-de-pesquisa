@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
+import type { NotificacaoItem } from "@/lib/dados-alertas";
+import { buscarNotificacoesProfessor } from "@/lib/actions/alertas";
 
 interface TopbarHeaderProps {
   userName?: string | null;
@@ -11,6 +13,7 @@ interface TopbarHeaderProps {
   userImage?: string | null;
   role?: "PROFESSOR" | "ALUNO" | "COORIENTADOR";
   centerTitle?: string | null;
+  notificacoes?: NotificacaoItem[];
 }
 
 const PROFESSOR_LINKS_PRINCIPAIS = [
@@ -133,9 +136,33 @@ export function TopbarHeader({
   userImage,
   role = "PROFESSOR",
   centerTitle,
+  notificacoes = [],
 }: TopbarHeaderProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [notificacoesState, setNotificacoesState] = useState<NotificacaoItem[]>(notificacoes);
   const pathname = usePathname();
+
+  useEffect(() => {
+    if (notificacoes) {
+      setNotificacoesState(notificacoes);
+    }
+  }, [notificacoes]);
+
+  // Polling em background para o orientador verificar alertas em tempo real
+  useEffect(() => {
+    if (role !== "PROFESSOR") return;
+    const interval = setInterval(async () => {
+      try {
+        const atualizadas = await buscarNotificacoesProfessor();
+        if (atualizadas) {
+          setNotificacoesState(atualizadas);
+        }
+      } catch {
+        // Silencioso em caso de erro no polling
+      }
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [role]);
 
   const activeCenterTitle = centerTitle ?? (pathname === "/producao" ? "Suas Produções" : pathname === "/painel" ? "Painel de Orientandos" : null);
 
@@ -214,7 +241,7 @@ export function TopbarHeader({
             <div className="relative group">
               <Link
                 href={isAluno ? "/inicio" : "/alertas"}
-                className="flex h-10 w-10 items-center justify-center rounded-full text-white transition-colors hover:bg-white/10 active:scale-95 focus:outline-none cursor-pointer"
+                className="relative flex h-10 w-10 items-center justify-center rounded-full text-white transition-colors hover:bg-white/10 active:scale-95 focus:outline-none cursor-pointer"
                 aria-label="Alertas e Notificações"
                 title="Alertas e Notificações"
               >
@@ -231,29 +258,81 @@ export function TopbarHeader({
                     d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"
                   />
                 </svg>
+                {notificacoesState.length > 0 && (
+                  <span className="absolute top-1.5 right-1.5 flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white shadow-sm ring-2 ring-[#133C1B]">
+                    {notificacoesState.length}
+                  </span>
+                )}
               </Link>
 
               {/* Popup de notificações no hover */}
               <div className="absolute right-0 top-full pt-2 opacity-0 invisible pointer-events-none group-hover:opacity-100 group-hover:visible group-hover:pointer-events-auto transition-all duration-200 z-50">
-                <div className="w-72 rounded-xl border border-zinc-200 bg-white p-4 text-zinc-900 shadow-xl ring-1 ring-black/5">
-                  <div className="flex items-center justify-between border-b border-zinc-100 pb-2 mb-3">
-                    <h3 className="font-karla text-xs font-semibold uppercase tracking-wider text-zinc-900">
-                      Notificações
-                    </h3>
+                <div className="w-80 sm:w-96 rounded-2xl border border-zinc-200 bg-white p-4 text-zinc-900 shadow-2xl ring-1 ring-black/5">
+                  <div className="flex items-center justify-between border-b border-zinc-100 pb-2.5 mb-2">
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-karla text-xs font-bold uppercase tracking-wider text-zinc-900">
+                        Notificações
+                      </h3>
+                      {notificacoesState.length > 0 && (
+                        <span className="rounded-full bg-red-100 px-2 py-0.2 text-[10px] font-bold text-red-700 font-karla">
+                          {notificacoesState.length}
+                        </span>
+                      )}
+                    </div>
                     {!isAluno && (
                       <Link
                         href="/alertas"
                         className="text-[11px] font-semibold text-[#133C1B] hover:underline font-karla"
                       >
-                        Ver alertas
+                        Ver alertas →
                       </Link>
                     )}
                   </div>
-                  <div className="py-3 text-center">
-                    <p className="text-xs text-zinc-600">
-                      Você não possui nenhuma notificação no momento
-                    </p>
-                  </div>
+
+                  {notificacoesState.length === 0 ? (
+                    <div className="py-6 text-center">
+                      <p className="text-xs text-zinc-500 font-spectral">
+                        Você não possui nenhuma notificação no momento
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="max-h-72 overflow-y-auto divide-y divide-zinc-100">
+                      {notificacoesState.map((notif) => (
+                        <div key={notif.id} className="py-2.5 px-1 hover:bg-zinc-50/80 rounded-lg transition-colors">
+                          <div className="flex items-start gap-2.5">
+                            <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-amber-100 text-amber-800">
+                              <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                              </svg>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-zinc-900 font-karla leading-snug">
+                                {notif.mensagem}
+                              </p>
+                              <div className="flex items-center justify-between mt-1 text-[11px] text-zinc-500 font-spectral">
+                                {notif.alunoId ? (
+                                  <Link
+                                    href={`/alunos/${notif.alunoId}`}
+                                    className="text-[#133C1B] font-medium hover:underline font-karla"
+                                  >
+                                    Acessar orientando →
+                                  </Link>
+                                ) : <span />}
+                                <span className="text-[10px] text-zinc-400">
+                                  {new Date(notif.criadoEm).toLocaleDateString("pt-BR", {
+                                    day: "2-digit",
+                                    month: "2-digit",
+                                    hour: "2-digit",
+                                    minute: "2-digit",
+                                  })}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

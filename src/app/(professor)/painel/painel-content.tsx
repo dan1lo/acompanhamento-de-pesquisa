@@ -12,6 +12,7 @@ export interface AlunoPainelItem {
   statusEfetivo: "OK" | "ATENCAO" | "CRITICO";
   statusManual?: "OK" | "ATENCAO" | "CRITICO" | null;
   diasSemReuniao: number;
+  dataReferencia?: string;
   quantidadeArtigos: number;
   arquivado: boolean;
 }
@@ -109,6 +110,83 @@ function SleepyFaceIcon({ className = "h-24 w-24" }: { className?: string }) {
         <text x="71" y="9" fontSize="9" fontWeight="bold">z</text>
       </g>
     </svg>
+  );
+}
+
+function ContadorDiasSemReuniao({
+  dataReferencia,
+  diasIniciais,
+}: {
+  dataReferencia?: string;
+  diasIniciais: number;
+}) {
+  const [agora, setAgora] = useState<number>(Date.now());
+
+  useEffect(() => {
+    // Atualiza o relógio a cada segundo para manter o contador e o ciclo de 24h em tempo real
+    const timer = setInterval(() => {
+      setAgora(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const { dias, horas, minutos, segundos } = useMemo(() => {
+    if (!dataReferencia) {
+      return { dias: diasIniciais, horas: 24, minutos: 0, segundos: 0 };
+    }
+    const refMs = new Date(dataReferencia).getTime();
+    const diffMs = Math.max(0, agora - refMs);
+
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    const diasCalc = Math.floor(diffMs / DAY_MS);
+
+    // Tempo restante para completar o próximo ciclo de 24 horas
+    const msNoCicloAtual = diffMs % DAY_MS;
+    const msRestanteParaProximoDia = DAY_MS - msNoCicloAtual;
+
+    const horasRest = Math.floor(msRestanteParaProximoDia / (60 * 60 * 1000));
+    const minutosRest = Math.floor((msRestanteParaProximoDia % (60 * 60 * 1000)) / (60 * 1000));
+    const segundosRest = Math.floor((msRestanteParaProximoDia % (60 * 1000)) / 1000);
+
+    return {
+      dias: diasCalc,
+      horas: horasRest,
+      minutos: minutosRest,
+      segundos: segundosRest,
+    };
+  }, [dataReferencia, diasIniciais, agora]);
+
+  const pad = (n: number) => String(n).padStart(2, "0");
+
+  const corStatus =
+    dias > 30
+      ? "text-red-600 font-semibold"
+      : dias >= 7
+      ? "text-amber-700 font-semibold"
+      : "text-zinc-700 font-medium";
+
+  return (
+    <div className="flex flex-col">
+      <div className="flex items-center gap-1.5">
+        <span className={`text-sm ${corStatus}`}>
+          {dias} {dias === 1 ? "dia" : "dias"}
+        </span>
+        {dias >= 7 && (
+          <span
+            className="rounded-full bg-amber-100 px-1.5 py-0.2 text-[10px] font-bold text-amber-800 font-karla"
+            title="Aluno há 1 semana ou mais sem reunião"
+          >
+            ≥ 1 sem
+          </span>
+        )}
+      </div>
+      <span
+        className="text-[11px] text-zinc-400 font-mono tracking-tight"
+        title="Tempo até contabilizar mais 24 horas sem reunião"
+      >
+        +1 em {pad(horas)}:{pad(minutos)}:{pad(segundos)}
+      </span>
+    </div>
   );
 }
 
@@ -374,19 +452,12 @@ export function PainelContent({
                         </div>
                       </td>
 
-                      {/* Coluna 4: Dias sem reunião */}
+                      {/* Coluna 4: Dias sem reunião com contador em tempo real */}
                       <td className="px-5 py-4 text-zinc-700">
-                        <span
-                          className={
-                            aluno.diasSemReuniao > 30
-                              ? "font-semibold text-red-600"
-                              : aluno.diasSemReuniao > 15
-                              ? "font-medium text-amber-700"
-                              : "text-zinc-600"
-                          }
-                        >
-                          {aluno.diasSemReuniao} {aluno.diasSemReuniao === 1 ? "dia" : "dias"}
-                        </span>
+                        <ContadorDiasSemReuniao
+                          dataReferencia={aluno.dataReferencia}
+                          diasIniciais={aluno.diasSemReuniao}
+                        />
                       </td>
 
                       {/* Coluna 5: Quantidade de artigos */}

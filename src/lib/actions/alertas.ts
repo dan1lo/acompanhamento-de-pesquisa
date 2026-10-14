@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireProfessor } from "@/lib/guards";
 import { gerarAlertas } from "@/lib/jobs/alertas";
+import { verificarEObterAlertasProfessor } from "@/lib/dados-alertas";
 
 export async function gerarAlertasAgora() {
   await requireProfessor();
@@ -19,4 +20,10 @@ export async function resolverAlerta(alertaId: string) {
 
   await prisma.alerta.update({ where: { id: alertaId }, data: { resolvido: true } });
   revalidatePath("/alertas");
+  revalidatePath("/painel");
+}
+
+export async function buscarNotificacoesProfessor() {
+  const professor = await requireProfessor();
+  return verificarEObterAlertasProfessor(professor.id);
 }

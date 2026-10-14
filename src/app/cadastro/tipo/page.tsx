@@ -23,14 +23,14 @@ export default async function TipoContaPage({
       {/* Card branco centralizado com todo o conteúdo dentro */}
       <div className="w-full max-w-md rounded-3xl bg-white p-7 sm:p-9 shadow-2xl border border-black/5 space-y-6">
         <div className="text-center space-y-2">
-          {/* Logo / Ícone */}
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#133C1B] shadow-md ring-4 ring-[#133C1B]/15 overflow-hidden">
+          {/* Logo oficial SCHOLAB */}
+          <div className="flex justify-center mb-1">
             <Image
-              src="/icon.png"
-              alt="SCHOLAB Logo"
-              width={56}
-              height={56}
-              className="h-full w-full object-cover"
+              src="/logo.png"
+              alt="SCHOLAB"
+              width={160}
+              height={115}
+              className="h-24 w-auto object-contain"
               priority
             />
           </div>

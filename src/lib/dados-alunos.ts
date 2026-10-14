@@ -41,9 +41,11 @@ export async function listarAlunosComStatus(professorId: string, incluirArquivad
     const sugerido = statusAutomatico(dias, limites);
     const efetivo: StatusAluno = statusEfetivo(aluno.statusManual, sugerido);
 
+    const referencia = ultimaReuniao ?? aluno.dataInicio;
     return {
       ...aluno,
       diasSemReuniao: dias,
+      dataReferencia: referencia.toISOString(),
       statusSugerido: sugerido,
       statusEfetivo: efetivo,
       quantidadeArtigos: aluno._count?.producoes ?? 0,
