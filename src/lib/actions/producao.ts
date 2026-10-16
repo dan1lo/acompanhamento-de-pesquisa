@@ -35,15 +35,26 @@ const CriarProducaoSchema = z.object({
   venue: z.string().optional(),
   prazoSubmissao: z.string().optional(),
   googleDocsUrl: z.string().optional(),
+  overleafUrl: z.string().optional(),
 });
 
 export async function criarProducaoAcademica(formData: FormData) {
   const { aluno } = await requireAluno();
 
-  const vincular = formData.get("vincularGoogleDocs") === "true" || formData.get("vincularGoogleDocs") === "on";
+  const vincularDocs =
+    formData.get("vincularGoogleDocs") === "true" ||
+    formData.get("vincularGoogleDocs") === "on";
   let googleDocsUrl = formData.get("googleDocsUrl")?.toString().trim() || null;
-  if (!vincular || !googleDocsUrl) {
+  if (!vincularDocs || !googleDocsUrl) {
     googleDocsUrl = null;
+  }
+
+  const vincularOverleaf =
+    formData.get("vincularOverleaf") === "true" ||
+    formData.get("vincularOverleaf") === "on";
+  let overleafUrl = formData.get("overleafUrl")?.toString().trim() || null;
+  if (!vincularOverleaf || !overleafUrl) {
+    overleafUrl = null;
   }
 
   let conteudoInicial = "";
@@ -59,6 +70,7 @@ export async function criarProducaoAcademica(formData: FormData) {
     venue: formData.get("venue") || undefined,
     prazoSubmissao: formData.get("prazoSubmissao") || undefined,
     googleDocsUrl: googleDocsUrl || undefined,
+    overleafUrl: overleafUrl || undefined,
   });
 
   const novaProducao = await prisma.producaoAcademica.create({
@@ -68,6 +80,7 @@ export async function criarProducaoAcademica(formData: FormData) {
       venue: dados.venue,
       prazoSubmissao: dados.prazoSubmissao ? parseDataLocal(dados.prazoSubmissao) : undefined,
       googleDocsUrl: dados.googleDocsUrl,
+      overleafUrl: dados.overleafUrl,
       conteudo: conteudoInicial || null,
     },
   });

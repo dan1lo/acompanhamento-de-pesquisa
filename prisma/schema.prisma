@@ -362,6 +362,7 @@ model ProducaoAcademica {
   status         StatusProducao @default(EM_ESCRITA)
   prazoSubmissao DateTime?
   googleDocsUrl  String?
+  overleafUrl    String?
   conteudo       String?        @db.Text
   criadoEm       DateTime       @default(now())
   atualizadoEm   DateTime       @updatedAt

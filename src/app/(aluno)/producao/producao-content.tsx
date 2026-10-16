@@ -12,6 +12,7 @@ export interface ProducaoItem {
   status: "EM_ESCRITA" | "SUBMETIDO" | "EM_REVISAO" | "ACEITO" | "PUBLICADO";
   prazoSubmissao: Date | null;
   googleDocsUrl?: string | null;
+  overleafUrl?: string | null;
   conteudo?: string | null;
   criadoEm: Date;
 }
@@ -39,6 +40,19 @@ function getStatusBadgeStyle(status: string) {
     default:
       return "bg-zinc-100 text-zinc-700 border border-zinc-200";
   }
+}
+
+function OverleafIcon({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M19.8 3.2C14.6 3.2 9.5 6.1 7.1 10.8c-1.4 2.7-1.6 5.8-.5 8.4l-2.3 2.3a.75.75 0 1 0 1.06 1.06l2.28-2.28c1.4.5 3 .7 4.66.5 4.9-.6 8.5-4.9 8.5-10.3 0-2.6-.5-5.1-1-7.28zm-7.7 15.1c-1.2.15-2.35-.02-3.38-.42 1.88-1.98 4.44-4.23 7.38-5.58a.75.75 0 0 0-.62-1.36c-3.17 1.45-5.88 3.82-7.85 5.88-.58-1.8-.34-3.85.67-5.8 1.98-3.84 6.12-6.24 10.37-6.37.28 1.47.53 3.16.53 4.85 0 4.44-3.02 8.07-7.1 8.8z" />
+    </svg>
+  );
 }
 
 function SleepyFaceIcon({ className = "h-24 w-24" }: { className?: string }) {
@@ -113,6 +127,7 @@ function SleepyFaceIcon({ className = "h-24 w-24" }: { className?: string }) {
 
 export function ProducaoContent({ producoes }: { producoes: ProducaoItem[] }) {
   const [modalAberto, setModalAberto] = useState(false);
+  const [vincularOverleaf, setVincularOverleaf] = useState(false);
   const [vincularDocs, setVincularDocs] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -150,6 +165,7 @@ export function ProducaoContent({ producoes }: { producoes: ProducaoItem[] }) {
       try {
         await criarProducaoAcademica(formData);
         setModalAberto(false);
+        setVincularOverleaf(false);
         setVincularDocs(false);
       } catch (err: unknown) {
         if (err instanceof Error) {
@@ -220,14 +236,21 @@ export function ProducaoContent({ producoes }: { producoes: ProducaoItem[] }) {
 
                 {/* Badges de vinculação */}
                 <div className="mt-3 flex flex-wrap items-center gap-2">
-                  {p.googleDocsUrl ? (
+                  {p.overleafUrl && (
+                    <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-[#138A07] border border-emerald-200/90">
+                      <OverleafIcon className="h-3.5 w-3.5 shrink-0" />
+                      Overleaf Vinculado
+                    </span>
+                  )}
+                  {p.googleDocsUrl && (
                     <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 border border-blue-200/80">
                       <svg className="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="currentColor">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM13 3.5L18.5 9H13V3.5zM16 17H8v-2h8v2zm0-4H8v-2h8v2z" />
                       </svg>
                       Google Docs Vinculado
                     </span>
-                  ) : (
+                  )}
+                  {!p.overleafUrl && !p.googleDocsUrl && (
                     <span className="inline-flex items-center gap-1 rounded-md bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 border border-zinc-200/80">
                       <svg className="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
@@ -264,7 +287,23 @@ export function ProducaoContent({ producoes }: { producoes: ProducaoItem[] }) {
                 </div>
 
                 {/* Botões de Ação */}
-                <div className="flex items-center justify-end gap-2 pt-1 border-t border-zinc-50">
+                <div className="flex flex-wrap items-center justify-end gap-2 pt-1 border-t border-zinc-50">
+                  {p.overleafUrl && (
+                    <a
+                      href={p.overleafUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50/50 px-3 py-1.5 text-xs font-semibold text-[#138A07] hover:bg-emerald-50 hover:border-emerald-300 transition-colors font-karla"
+                      title="Abrir projeto no Overleaf"
+                    >
+                      <OverleafIcon className="h-3.5 w-3.5 shrink-0" />
+                      <span>Abrir Overleaf</span>
+                      <svg className="h-3 w-3 text-emerald-600/70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </a>
+                  )}
+
                   {p.googleDocsUrl && (
                     <a
                       href={p.googleDocsUrl}
@@ -314,6 +353,7 @@ export function ProducaoContent({ producoes }: { producoes: ProducaoItem[] }) {
         type="button"
         onClick={() => {
           setErro(null);
+          setVincularOverleaf(false);
           setVincularDocs(false);
           setModalAberto(true);
         }}
@@ -410,55 +450,131 @@ export function ProducaoContent({ producoes }: { producoes: ProducaoItem[] }) {
                 />
               </div>
 
-              {/* Opção Vincular com Google Docs */}
-              <div className="rounded-xl border border-zinc-200 bg-zinc-50/70 p-3.5 space-y-3 transition-colors">
-                <label className="flex items-center justify-between cursor-pointer select-none">
-                  <div className="flex items-center gap-2.5">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 text-blue-700 shrink-0">
-                      <svg className="h-4.5 w-4.5" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM13 3.5L18.5 9H13V3.5zM16 17H8v-2h8v2zm0-4H8v-2h8v2z" />
-                      </svg>
-                    </div>
-                    <div>
-                      <span className="block text-sm font-semibold text-zinc-900 font-karla">
-                        Vincular com Google Docs
-                      </span>
-                      <span className="block text-xs text-zinc-500 font-spectral">
-                        Sincronize com um documento já existente
-                      </span>
-                    </div>
-                  </div>
-                  <input
-                    type="checkbox"
-                    name="vincularGoogleDocs"
-                    value="true"
-                    checked={vincularDocs}
-                    onChange={(e) => setVincularDocs(e.target.checked)}
-                    className="h-4.5 w-4.5 rounded border-zinc-300 text-[#133C1B] focus:ring-[#133C1B] cursor-pointer"
-                    disabled={isPending}
-                  />
-                </label>
+              {/* Opções de Vinculação Externa */}
+              <div className="space-y-2.5">
+                <span className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 font-karla">
+                  Vincular plataforma externa (opcional)
+                </span>
 
-                {vincularDocs ? (
-                  <div className="pt-2 border-t border-zinc-200/80 space-y-2">
-                    <label className="text-xs font-semibold uppercase tracking-wider text-zinc-600 font-karla">
-                      URL do Documento *
-                    </label>
+                {/* Opção 1: Vincular com Overleaf */}
+                <div
+                  className={`rounded-xl border p-3.5 space-y-3 transition-colors ${
+                    vincularOverleaf
+                      ? "border-emerald-300 bg-emerald-50/40"
+                      : "border-zinc-200 bg-zinc-50/70"
+                  }`}
+                >
+                  <label className="flex items-center justify-between cursor-pointer select-none">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-[#138A07] shrink-0">
+                        <OverleafIcon className="h-4.5 w-4.5" />
+                      </div>
+                      <div>
+                        <span className="block text-sm font-semibold text-zinc-900 font-karla">
+                          Vincular com Overleaf
+                        </span>
+                        <span className="block text-xs text-zinc-500 font-spectral">
+                          Conecte um projeto LaTeX do Overleaf
+                        </span>
+                      </div>
+                    </div>
                     <input
-                      name="googleDocsUrl"
-                      type="url"
-                      required={vincularDocs}
-                      placeholder="https://docs.google.com/document/d/.../edit"
+                      type="checkbox"
+                      name="vincularOverleaf"
+                      value="true"
+                      checked={vincularOverleaf}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setVincularOverleaf(checked);
+                        if (checked) setVincularDocs(false);
+                      }}
+                      className="h-4.5 w-4.5 rounded border-zinc-300 text-[#133C1B] focus:ring-[#133C1B] cursor-pointer"
                       disabled={isPending}
-                      className="w-full rounded-xl border border-zinc-300 px-3.5 py-2 text-sm focus:border-[#133C1B] focus:outline-none focus:ring-2 focus:ring-[#133C1B]/20 transition-all font-spectral disabled:opacity-50"
                     />
-                    <p className="text-[11px] text-zinc-500 font-spectral leading-relaxed">
-                      💡 O documento deve estar configurado para &quot;Qualquer pessoa com o link pode ler/editar&quot; para permitir a sincronização automática.
-                    </p>
-                  </div>
-                ) : (
-                  <p className="text-xs text-zinc-500 font-spectral pt-1">
-                    Sem vínculo com o Docs, você poderá escrever e editar seu artigo diretamente no editor integrado da nossa plataforma.
+                  </label>
+
+                  {vincularOverleaf && (
+                    <div className="pt-2 border-t border-emerald-200/70 space-y-2">
+                      <label className="text-xs font-semibold uppercase tracking-wider text-zinc-600 font-karla">
+                        URL do Projeto no Overleaf *
+                      </label>
+                      <input
+                        name="overleafUrl"
+                        type="url"
+                        required={vincularOverleaf}
+                        placeholder="https://www.overleaf.com/project/... ou link de leitura/edição"
+                        disabled={isPending}
+                        className="w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2 text-sm focus:border-[#133C1B] focus:outline-none focus:ring-2 focus:ring-[#133C1B]/20 transition-all font-spectral disabled:opacity-50"
+                      />
+                      <p className="text-[11px] text-zinc-500 font-spectral leading-relaxed">
+                        💡 Cole o link do seu projeto no Overleaf (ou link compartilhável de leitura/edição) para acessar rapidamente seu artigo LaTeX e acompanhar com seu orientador.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Opção 2: Vincular com Google Docs */}
+                <div
+                  className={`rounded-xl border p-3.5 space-y-3 transition-colors ${
+                    vincularDocs
+                      ? "border-blue-300 bg-blue-50/30"
+                      : "border-zinc-200 bg-zinc-50/70"
+                  }`}
+                >
+                  <label className="flex items-center justify-between cursor-pointer select-none">
+                    <div className="flex items-center gap-2.5">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 text-blue-700 shrink-0">
+                        <svg className="h-4.5 w-4.5" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM13 3.5L18.5 9H13V3.5zM16 17H8v-2h8v2zm0-4H8v-2h8v2z" />
+                        </svg>
+                      </div>
+                      <div>
+                        <span className="block text-sm font-semibold text-zinc-900 font-karla">
+                          Vincular com Google Docs
+                        </span>
+                        <span className="block text-xs text-zinc-500 font-spectral">
+                          Sincronize com um documento já existente
+                        </span>
+                      </div>
+                    </div>
+                    <input
+                      type="checkbox"
+                      name="vincularGoogleDocs"
+                      value="true"
+                      checked={vincularDocs}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setVincularDocs(checked);
+                        if (checked) setVincularOverleaf(false);
+                      }}
+                      className="h-4.5 w-4.5 rounded border-zinc-300 text-[#133C1B] focus:ring-[#133C1B] cursor-pointer"
+                      disabled={isPending}
+                    />
+                  </label>
+
+                  {vincularDocs && (
+                    <div className="pt-2 border-t border-blue-200/70 space-y-2">
+                      <label className="text-xs font-semibold uppercase tracking-wider text-zinc-600 font-karla">
+                        URL do Documento *
+                      </label>
+                      <input
+                        name="googleDocsUrl"
+                        type="url"
+                        required={vincularDocs}
+                        placeholder="https://docs.google.com/document/d/.../edit"
+                        disabled={isPending}
+                        className="w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2 text-sm focus:border-[#133C1B] focus:outline-none focus:ring-2 focus:ring-[#133C1B]/20 transition-all font-spectral disabled:opacity-50"
+                      />
+                      <p className="text-[11px] text-zinc-500 font-spectral leading-relaxed">
+                        💡 O documento deve estar configurado para &quot;Qualquer pessoa com o link pode ler/editar&quot; para permitir a sincronização automática.
+                      </p>
+                    </div>
+                  )}
+                </div>
+
+                {!vincularOverleaf && !vincularDocs && (
+                  <p className="text-xs text-zinc-500 font-spectral px-1">
+                    Sem vínculo externo, você poderá escrever e editar seu artigo diretamente no editor integrado da nossa plataforma.
                   </p>
                 )}
               </div>

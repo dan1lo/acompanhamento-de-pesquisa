@@ -12,6 +12,7 @@ interface Producao {
   status: "EM_ESCRITA" | "SUBMETIDO" | "EM_REVISAO" | "ACEITO" | "PUBLICADO";
   prazoSubmissao: Date | null;
   googleDocsUrl: string | null;
+  overleafUrl?: string | null;
   conteudo: string | null;
   criadoEm: Date;
   atualizadoEm: Date;
@@ -25,13 +26,26 @@ const ROTULOS_STATUS: Record<string, string> = {
   PUBLICADO: "Publicado",
 };
 
+function OverleafIcon({ className = "h-4 w-4" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M19.8 3.2C14.6 3.2 9.5 6.1 7.1 10.8c-1.4 2.7-1.6 5.8-.5 8.4l-2.3 2.3a.75.75 0 1 0 1.06 1.06l2.28-2.28c1.4.5 3 .7 4.66.5 4.9-.6 8.5-4.9 8.5-10.3 0-2.6-.5-5.1-1-7.28zm-7.7 15.1c-1.2.15-2.35-.02-3.38-.42 1.88-1.98 4.44-4.23 7.38-5.58a.75.75 0 0 0-.62-1.36c-3.17 1.45-5.88 3.82-7.85 5.88-.58-1.8-.34-3.85.67-5.8 1.98-3.84 6.12-6.24 10.37-6.37.28 1.47.53 3.16.53 4.85 0 4.44-3.02 8.07-7.1 8.8z" />
+    </svg>
+  );
+}
+
 export function EditorContent({ producao }: { producao: Producao }) {
   const [conteudo, setConteudo] = useState(producao.conteudo || "");
   const [salvando, startSalvando] = useTransition();
   const [sincronizando, startSincronizando] = useTransition();
   const [mensagemSucesso, setMensagemSucesso] = useState<string | null>(null);
   const [mensagemErro, setMensagemErro] = useState<string | null>(null);
-  const [abaAtiva, setAbaAtiva] = useState<"editor" | "docs">("editor");
+  const [abaAtiva, setAbaAtiva] = useState<"editor" | "docs" | "overleaf">("editor");
   const [modificado, setModificado] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
 
@@ -112,6 +126,48 @@ export function EditorContent({ producao }: { producao: Producao }) {
     });
   }
 
+  function handleInserirTemplateLatex() {
+    const template = [
+      "<p>\\documentclass[12pt]{article}</p>",
+      "<p>\\usepackage[utf8]{inputenc}</p>",
+      "<p>\\usepackage[brazil]{babel}</p>",
+      "<p>\\usepackage{amsmath, amssymb, graphicx}</p>",
+      "<p><br></p>",
+      `<p>\\title{${producao.titulo}}</p>`,
+      "<p>\\author{Autor(es)}</p>",
+      "<p>\\date{\\today}</p>",
+      "<p><br></p>",
+      "<p>\\begin{document}</p>",
+      "<p>\\maketitle</p>",
+      "<p><br></p>",
+      "<p>\\begin{abstract}</p>",
+      "<p>Escreva o resumo do seu artigo aqui...</p>",
+      "<p>\\end{abstract}</p>",
+      "<p><br></p>",
+      "<p>\\section{Introdução}</p>",
+      "<p>Desenvolva a introdução do seu trabalho...</p>",
+      "<p><br></p>",
+      "<p>\\section{Metodologia}</p>",
+      "<p><br></p>",
+      "<p>\\section{Resultados e Discussão}</p>",
+      "<p><br></p>",
+      "<p>\\section{Conclusão}</p>",
+      "<p><br></p>",
+      "<p>\\bibliographystyle{plain}</p>",
+      "<p>\\bibliography{referencias}</p>",
+      "<p>\\end{document}</p>",
+    ].join("");
+
+    setConteudo(template);
+    if (editorRef.current) {
+      editorRef.current.innerHTML = template;
+    }
+    setModificado(true);
+    setAbaAtiva("editor");
+    setMensagemSucesso("Estrutura base LaTeX inserida no editor! Clique em 'Salvar alterações' para gravar.");
+    setTimeout(() => setMensagemSucesso(null), 4000);
+  }
+
   return (
     <div className="space-y-6 pb-20 animate-fade-in text-left">
       {/* Barra superior de navegação e ações */}
@@ -133,14 +189,21 @@ export function EditorContent({ producao }: { producao: Producao }) {
             <span className="rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs font-semibold text-zinc-700 font-karla border border-zinc-200">
               {ROTULOS_STATUS[producao.status]}
             </span>
-            {producao.googleDocsUrl ? (
+            {producao.overleafUrl && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-[#138A07] font-karla border border-emerald-200">
+                <OverleafIcon className="h-3.5 w-3.5" />
+                Overleaf Vinculado
+              </span>
+            )}
+            {producao.googleDocsUrl && (
               <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700 font-karla border border-blue-200">
                 <svg className="h-3 w-3 text-blue-600" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm4 18H6V4h7v5h5v11z" />
                 </svg>
                 Google Docs Vinculado
               </span>
-            ) : (
+            )}
+            {!producao.overleafUrl && !producao.googleDocsUrl && (
               <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-800 font-karla border border-emerald-200">
                 Editor Integrado
               </span>
@@ -155,7 +218,23 @@ export function EditorContent({ producao }: { producao: Producao }) {
         </div>
 
         {/* Botões de Ação do Header */}
-        <div className="flex items-center gap-2 sm:self-end">
+        <div className="flex flex-wrap items-center gap-2 sm:self-end">
+          {producao.overleafUrl && (
+            <a
+              href={producao.overleafUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-300 bg-emerald-50 px-3.5 py-2 text-xs font-semibold text-[#138A07] shadow-2xs hover:bg-emerald-100 active:scale-95 transition-all font-karla"
+              title="Abrir projeto no Overleaf"
+            >
+              <OverleafIcon className="h-4 w-4" />
+              <span>Abrir no Overleaf</span>
+              <svg className="h-3.5 w-3.5 text-emerald-600/80" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
+              </svg>
+            </a>
+          )}
+
           {producao.googleDocsUrl && (
             <>
               <button
@@ -231,8 +310,8 @@ export function EditorContent({ producao }: { producao: Producao }) {
         </div>
       )}
 
-      {/* Se vinculado com Google Docs, exibe abas */}
-      {producao.googleDocsUrl && (
+      {/* Abas quando vinculado com Overleaf ou Google Docs */}
+      {(producao.overleafUrl || producao.googleDocsUrl) && (
         <div className="flex border-b border-zinc-200 space-x-4">
           <button
             onClick={() => setAbaAtiva("editor")}
@@ -244,16 +323,78 @@ export function EditorContent({ producao }: { producao: Producao }) {
           >
             ✍️ Editor da Aplicação
           </button>
-          <button
-            onClick={() => setAbaAtiva("docs")}
-            className={`pb-2.5 text-sm font-semibold font-karla border-b-2 transition-colors cursor-pointer ${
-              abaAtiva === "docs"
-                ? "border-[#133C1B] text-[#133C1B]"
-                : "border-transparent text-zinc-500 hover:text-zinc-800"
-            }`}
-          >
-            📄 Integração Google Docs
-          </button>
+          {producao.overleafUrl && (
+            <button
+              onClick={() => setAbaAtiva("overleaf")}
+              className={`pb-2.5 text-sm font-semibold font-karla border-b-2 transition-colors cursor-pointer inline-flex items-center gap-1.5 ${
+                abaAtiva === "overleaf"
+                  ? "border-[#133C1B] text-[#133C1B]"
+                  : "border-transparent text-zinc-500 hover:text-zinc-800"
+              }`}
+            >
+              <OverleafIcon className="h-4 w-4 text-[#138A07]" />
+              <span>Integração Overleaf</span>
+            </button>
+          )}
+          {producao.googleDocsUrl && (
+            <button
+              onClick={() => setAbaAtiva("docs")}
+              className={`pb-2.5 text-sm font-semibold font-karla border-b-2 transition-colors cursor-pointer ${
+                abaAtiva === "docs"
+                  ? "border-[#133C1B] text-[#133C1B]"
+                  : "border-transparent text-zinc-500 hover:text-zinc-800"
+              }`}
+            >
+              📄 Integração Google Docs
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Aba de Informações / Overleaf */}
+      {producao.overleafUrl && abaAtiva === "overleaf" && (
+        <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-xs space-y-4">
+          <div className="flex items-start gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-emerald-50 text-[#138A07] border border-emerald-200/80">
+              <OverleafIcon className="h-6 w-6" />
+            </div>
+            <div className="space-y-1">
+              <h3 className="text-base font-bold text-zinc-900 font-karla">
+                Projeto Vinculado ao Overleaf (LaTeX)
+              </h3>
+              <p className="text-sm text-zinc-600 font-spectral">
+                Este trabalho está conectado ao seu projeto no Overleaf. Você pode abrir o ambiente LaTeX diretamente pelo link abaixo ou manter rascunhos, anotações e trechos do código <code className="rounded bg-zinc-100 px-1 py-0.5 text-xs font-mono">.tex</code> salvos no editor integrado.
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-xl bg-zinc-50 p-4 border border-zinc-200/70 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="overflow-hidden">
+              <span className="text-xs font-semibold text-zinc-500 font-karla uppercase tracking-wider">
+                URL do Projeto no Overleaf:
+              </span>
+              <p className="text-sm text-[#138A07] font-mono truncate pt-0.5">
+                {producao.overleafUrl}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleInserirTemplateLatex}
+                className="rounded-lg border border-emerald-300 bg-emerald-50 px-3.5 py-2 text-xs font-semibold text-[#138A07] hover:bg-emerald-100 transition-colors font-karla cursor-pointer"
+              >
+                Inserir Template LaTeX no Editor
+              </button>
+              <a
+                href={producao.overleafUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-lg bg-[#138A07] px-3.5 py-2 text-xs font-semibold text-white hover:bg-[#0f6e05] transition-colors font-karla inline-flex items-center gap-1"
+              >
+                Abrir no Overleaf ↗
+              </a>
+            </div>
+          </div>
         </div>
       )}
 
@@ -309,7 +450,7 @@ export function EditorContent({ producao }: { producao: Producao }) {
       )}
 
       {/* Editor Principal */}
-      {(abaAtiva === "editor" || !producao.googleDocsUrl) && (
+      {(abaAtiva === "editor" || (!producao.googleDocsUrl && !producao.overleafUrl)) && (
         <div className="rounded-2xl border border-zinc-200 bg-white shadow-xs overflow-hidden">
           {/* Barra de Ferramentas de Formatação */}
           <div className="flex flex-wrap items-center gap-1 border-b border-zinc-200 bg-zinc-50/80 px-3 py-2 text-zinc-700 font-karla">

@@ -136,17 +136,19 @@ export function TopbarHeader({
   userImage,
   role = "PROFESSOR",
   centerTitle,
-  notificacoes = [],
+  notificacoes,
 }: TopbarHeaderProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [notificacoesState, setNotificacoesState] = useState<NotificacaoItem[]>(notificacoes);
+  const [notificacoesState, setNotificacoesState] = useState<NotificacaoItem[]>(() => notificacoes ?? []);
   const pathname = usePathname();
+
+  const notificacoesKey = notificacoes?.map((n) => n.id).join(",") ?? "";
 
   useEffect(() => {
     if (notificacoes) {
       setNotificacoesState(notificacoes);
     }
-  }, [notificacoes]);
+  }, [notificacoesKey]);
 
   // Polling em background para o orientador verificar alertas em tempo real
   useEffect(() => {
