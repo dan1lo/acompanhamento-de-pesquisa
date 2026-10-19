@@ -363,7 +363,8 @@ model ProducaoAcademica {
   prazoSubmissao DateTime?
   googleDocsUrl  String?
   overleafUrl    String?
-  conteudo       String?        @db.Text
+  conteudo        String?        @db.Text
+  comentariosJson String?        @db.Text
   criadoEm       DateTime       @default(now())
   atualizadoEm   DateTime       @updatedAt
 

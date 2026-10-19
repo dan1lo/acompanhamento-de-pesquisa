@@ -166,7 +166,7 @@ export function TopbarHeader({
     return () => clearInterval(interval);
   }, [role]);
 
-  const activeCenterTitle = centerTitle ?? (pathname === "/producao" ? "Suas Produções" : pathname === "/painel" ? "Painel de Orientandos" : null);
+  const activeCenterTitle = centerTitle ?? (pathname === "/producao" ? "Suas Produções" : pathname === "/painel" ? "Painel de Orientandos" : pathname?.startsWith("/alunos/") ? "Acompanhamento Individual" : null);
 
   const isAluno = role === "ALUNO";
   const homeHref = isAluno ? "/inicio" : "/painel";

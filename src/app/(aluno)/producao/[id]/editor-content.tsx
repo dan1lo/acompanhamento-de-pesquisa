@@ -2,8 +2,15 @@
 
 import { useState, useTransition, useEffect, useRef } from "react";
 import Link from "next/link";
-import { formatarData } from "@/lib/datas";
-import { atualizarConteudoProducao, sincronizarGoogleDocs } from "@/lib/actions/producao";
+import { formatarData, formatarDataHora } from "@/lib/datas";
+import {
+  atualizarConteudoProducao,
+  sincronizarGoogleDocs,
+  resolverComentarioProducao,
+  obterComentariosProducaoAluno,
+  type CorMarcacao,
+  type ComentarioArtigo,
+} from "@/lib/actions/producao";
 
 interface Producao {
   id: string;
@@ -13,6 +20,7 @@ interface Producao {
   prazoSubmissao: Date | null;
   googleDocsUrl: string | null;
   overleafUrl?: string | null;
+  comentariosJson?: string | null;
   conteudo: string | null;
   criadoEm: Date;
   atualizadoEm: Date;
@@ -25,6 +33,56 @@ const ROTULOS_STATUS: Record<string, string> = {
   ACEITO: "Aceito",
   PUBLICADO: "Publicado",
 };
+
+const CORES_MARCACAO: Record<
+  CorMarcacao,
+  {
+    nome: string;
+    dotClass: string;
+    badgeClass: string;
+    borderClass: string;
+    quoteBgClass: string;
+  }
+> = {
+  AMARELO: {
+    nome: "Amarelo",
+    dotClass: "bg-yellow-400 border-yellow-600",
+    badgeClass: "bg-yellow-100 text-yellow-900 border-yellow-300",
+    borderClass: "border-l-yellow-400",
+    quoteBgClass: "bg-yellow-100/80 text-yellow-950",
+  },
+  VERMELHO: {
+    nome: "Vermelho",
+    dotClass: "bg-red-400 border-red-600",
+    badgeClass: "bg-red-100 text-red-900 border-red-300",
+    borderClass: "border-l-red-400",
+    quoteBgClass: "bg-red-100/80 text-red-950",
+  },
+  AZUL: {
+    nome: "Azul",
+    dotClass: "bg-blue-400 border-blue-600",
+    badgeClass: "bg-blue-100 text-blue-900 border-blue-300",
+    borderClass: "border-l-blue-400",
+    quoteBgClass: "bg-blue-100/80 text-blue-950",
+  },
+  ROXO: {
+    nome: "Roxo",
+    dotClass: "bg-purple-400 border-purple-600",
+    badgeClass: "bg-purple-100 text-purple-900 border-purple-300",
+    borderClass: "border-l-purple-400",
+    quoteBgClass: "bg-purple-100/80 text-purple-950",
+  },
+};
+
+function parseComentarios(jsonStr?: string | null): ComentarioArtigo[] {
+  if (!jsonStr) return [];
+  try {
+    const parsed = JSON.parse(jsonStr);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
 
 function OverleafIcon({ className = "h-4 w-4" }: { className?: string }) {
   return (
@@ -41,8 +99,12 @@ function OverleafIcon({ className = "h-4 w-4" }: { className?: string }) {
 
 export function EditorContent({ producao }: { producao: Producao }) {
   const [conteudo, setConteudo] = useState(producao.conteudo || "");
+  const [comentariosJson, setComentariosJson] = useState<string | null>(
+    producao.comentariosJson ?? null
+  );
   const [salvando, startSalvando] = useTransition();
   const [sincronizando, startSincronizando] = useTransition();
+  const [resolvendo, startResolvendo] = useTransition();
   const [mensagemSucesso, setMensagemSucesso] = useState<string | null>(null);
   const [mensagemErro, setMensagemErro] = useState<string | null>(null);
   const [abaAtiva, setAbaAtiva] = useState<"editor" | "docs" | "overleaf">("editor");
@@ -55,6 +117,29 @@ export function EditorContent({ producao }: { producao: Producao }) {
       editorRef.current.innerHTML = producao.conteudo || "<p><br></p>";
     }
   }, [producao.conteudo]);
+
+  // Sincroniza novos comentários/marcações do orientador em tempo real quando o aluno não tiver edições não salvas
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const res = await obterComentariosProducaoAluno(producao.id);
+        if (res.comentariosJson !== comentariosJson) {
+          setComentariosJson(res.comentariosJson);
+          if (!modificado && res.conteudo && editorRef.current) {
+            setConteudo(res.conteudo);
+            editorRef.current.innerHTML = res.conteudo;
+          }
+        }
+      } catch {
+        // Silencioso no polling
+      }
+    }, 6000);
+    return () => clearInterval(interval);
+  }, [producao.id, comentariosJson, modificado]);
+
+  const listaComentarios = parseComentarios(comentariosJson);
+  const comentariosPendentes = listaComentarios.filter((c) => !c.resolvido);
+  const comentariosResolvidos = listaComentarios.filter((c) => c.resolvido);
 
   // Contadores
   const textoLimpo = conteudo.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
@@ -95,6 +180,30 @@ export function EditorContent({ producao }: { producao: Producao }) {
     });
   }
 
+  function handleResolverComentario(comentarioId: string) {
+    startResolvendo(async () => {
+      try {
+        // Salva primeiro o texto atual caso tenha modificações locais
+        if (modificado) {
+          await atualizarConteudoProducao(producao.id, conteudo);
+          setModificado(false);
+        }
+        const res = await resolverComentarioProducao(producao.id, comentarioId);
+        setComentariosJson(JSON.stringify(res.comentarios));
+        if (res.conteudo !== undefined && res.conteudo !== null) {
+          setConteudo(res.conteudo);
+          if (editorRef.current) {
+            editorRef.current.innerHTML = res.conteudo;
+          }
+        }
+        setMensagemSucesso("Comentário marcado como resolvido!");
+        setTimeout(() => setMensagemSucesso(null), 3000);
+      } catch {
+        setMensagemErro("Não foi possível resolver o comentário.");
+      }
+    });
+  }
+
   function handleSincronizarGoogleDocs() {
     if (!producao.googleDocsUrl) return;
     setMensagemErro(null);
@@ -103,7 +212,6 @@ export function EditorContent({ producao }: { producao: Producao }) {
       try {
         const res = await sincronizarGoogleDocs(producao.id);
         if (res.conteudo) {
-          // Converte quebras de linha em parágrafos se for texto puro
           const formatado = res.conteudo
             .split(/\r?\n\r?\n/)
             .map((p) => `<p>${p.replace(/\r?\n/g, "<br>")}</p>`)
@@ -208,6 +316,18 @@ export function EditorContent({ producao }: { producao: Producao }) {
                 Editor Integrado
               </span>
             )}
+            <span
+              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold font-karla border ${
+                comentariosPendentes.length > 0
+                  ? "bg-amber-50 text-amber-800 border-amber-300"
+                  : "bg-zinc-100 text-zinc-600 border-zinc-200"
+              }`}
+            >
+              {comentariosPendentes.length}{" "}
+              {comentariosPendentes.length === 1
+                ? "comentário para resolver"
+                : "comentários para resolver"}
+            </span>
           </div>
           {producao.venue && (
             <p className="text-xs text-zinc-500 font-spectral">
@@ -449,147 +569,245 @@ export function EditorContent({ producao }: { producao: Producao }) {
         </div>
       )}
 
-      {/* Editor Principal */}
+      {/* Editor Principal + Painel de Marcações e Comentários do Orientador */}
       {(abaAtiva === "editor" || (!producao.googleDocsUrl && !producao.overleafUrl)) && (
-        <div className="rounded-2xl border border-zinc-200 bg-white shadow-xs overflow-hidden">
-          {/* Barra de Ferramentas de Formatação */}
-          <div className="flex flex-wrap items-center gap-1 border-b border-zinc-200 bg-zinc-50/80 px-3 py-2 text-zinc-700 font-karla">
-            <button
-              type="button"
-              onClick={() => aplicarComando("bold")}
-              className="rounded p-1.5 hover:bg-zinc-200 text-sm font-bold cursor-pointer"
-              title="Negrito (Ctrl+B)"
-            >
-              B
-            </button>
-            <button
-              type="button"
-              onClick={() => aplicarComando("italic")}
-              className="rounded p-1.5 hover:bg-zinc-200 text-sm italic cursor-pointer font-spectral"
-              title="Itálico (Ctrl+I)"
-            >
-              I
-            </button>
-            <button
-              type="button"
-              onClick={() => aplicarComando("underline")}
-              className="rounded p-1.5 hover:bg-zinc-200 text-sm underline cursor-pointer"
-              title="Sublinhado (Ctrl+U)"
-            >
-              U
-            </button>
-            <button
-              type="button"
-              onClick={() => aplicarComando("strikeThrough")}
-              className="rounded p-1.5 hover:bg-zinc-200 text-sm line-through cursor-pointer"
-              title="Tachado"
-            >
-              S
-            </button>
+        <div className="grid gap-6 lg:grid-cols-[1fr_340px] items-start">
+          {/* Coluna Esquerda: Editor */}
+          <div className="rounded-2xl border border-zinc-200 bg-white shadow-xs overflow-hidden">
+            {/* Barra de Ferramentas de Formatação */}
+            <div className="flex flex-wrap items-center gap-1 border-b border-zinc-200 bg-zinc-50/80 px-3 py-2 text-zinc-700 font-karla">
+              <button
+                type="button"
+                onClick={() => aplicarComando("bold")}
+                className="rounded p-1.5 hover:bg-zinc-200 text-sm font-bold cursor-pointer"
+                title="Negrito (Ctrl+B)"
+              >
+                B
+              </button>
+              <button
+                type="button"
+                onClick={() => aplicarComando("italic")}
+                className="rounded p-1.5 hover:bg-zinc-200 text-sm italic cursor-pointer font-spectral"
+                title="Itálico (Ctrl+I)"
+              >
+                I
+              </button>
+              <button
+                type="button"
+                onClick={() => aplicarComando("underline")}
+                className="rounded p-1.5 hover:bg-zinc-200 text-sm underline cursor-pointer"
+                title="Sublinhado (Ctrl+U)"
+              >
+                U
+              </button>
+              <button
+                type="button"
+                onClick={() => aplicarComando("strikeThrough")}
+                className="rounded p-1.5 hover:bg-zinc-200 text-sm line-through cursor-pointer"
+                title="Tachado"
+              >
+                S
+              </button>
 
-            <span className="h-5 w-[1px] bg-zinc-300 mx-1"></span>
+              <span className="h-5 w-[1px] bg-zinc-300 mx-1"></span>
 
-            <button
-              type="button"
-              onClick={() => aplicarComando("formatBlock", "<h1>")}
-              className="rounded px-2 py-1 hover:bg-zinc-200 text-xs font-bold cursor-pointer"
-              title="Título 1"
-            >
-              H1
-            </button>
-            <button
-              type="button"
-              onClick={() => aplicarComando("formatBlock", "<h2>")}
-              className="rounded px-2 py-1 hover:bg-zinc-200 text-xs font-bold cursor-pointer"
-              title="Título 2"
-            >
-              H2
-            </button>
-            <button
-              type="button"
-              onClick={() => aplicarComando("formatBlock", "<h3>")}
-              className="rounded px-2 py-1 hover:bg-zinc-200 text-xs font-bold cursor-pointer"
-              title="Título 3"
-            >
-              H3
-            </button>
-            <button
-              type="button"
-              onClick={() => aplicarComando("formatBlock", "<p>")}
-              className="rounded px-2 py-1 hover:bg-zinc-200 text-xs cursor-pointer"
-              title="Parágrafo Normal"
-            >
-              ¶ Texto
-            </button>
+              <button
+                type="button"
+                onClick={() => aplicarComando("formatBlock", "<h1>")}
+                className="rounded px-2 py-1 hover:bg-zinc-200 text-xs font-bold cursor-pointer"
+                title="Título 1"
+              >
+                H1
+              </button>
+              <button
+                type="button"
+                onClick={() => aplicarComando("formatBlock", "<h2>")}
+                className="rounded px-2 py-1 hover:bg-zinc-200 text-xs font-bold cursor-pointer"
+                title="Título 2"
+              >
+                H2
+              </button>
+              <button
+                type="button"
+                onClick={() => aplicarComando("formatBlock", "<h3>")}
+                className="rounded px-2 py-1 hover:bg-zinc-200 text-xs font-bold cursor-pointer"
+                title="Título 3"
+              >
+                H3
+              </button>
+              <button
+                type="button"
+                onClick={() => aplicarComando("formatBlock", "<p>")}
+                className="rounded px-2 py-1 hover:bg-zinc-200 text-xs cursor-pointer"
+                title="Parágrafo Normal"
+              >
+                ¶ Texto
+              </button>
 
-            <span className="h-5 w-[1px] bg-zinc-300 mx-1"></span>
+              <span className="h-5 w-[1px] bg-zinc-300 mx-1"></span>
 
-            <button
-              type="button"
-              onClick={() => aplicarComando("insertUnorderedList")}
-              className="rounded p-1.5 hover:bg-zinc-200 text-sm cursor-pointer"
-              title="Lista com Marcadores"
-            >
-              • Lista
-            </button>
-            <button
-              type="button"
-              onClick={() => aplicarComando("insertOrderedList")}
-              className="rounded p-1.5 hover:bg-zinc-200 text-sm cursor-pointer"
-              title="Lista Numerada"
-            >
-              1. Lista
-            </button>
-            <button
-              type="button"
-              onClick={() => aplicarComando("formatBlock", "<blockquote>")}
-              className="rounded p-1.5 hover:bg-zinc-200 text-sm cursor-pointer font-serif"
-              title="Citação"
-            >
-              &ldquo; Citação
-            </button>
+              <button
+                type="button"
+                onClick={() => aplicarComando("insertUnorderedList")}
+                className="rounded p-1.5 hover:bg-zinc-200 text-sm cursor-pointer"
+                title="Lista com Marcadores"
+              >
+                • Lista
+              </button>
+              <button
+                type="button"
+                onClick={() => aplicarComando("insertOrderedList")}
+                className="rounded p-1.5 hover:bg-zinc-200 text-sm cursor-pointer"
+                title="Lista Numerada"
+              >
+                1. Lista
+              </button>
+              <button
+                type="button"
+                onClick={() => aplicarComando("formatBlock", "<blockquote>")}
+                className="rounded p-1.5 hover:bg-zinc-200 text-sm cursor-pointer font-serif"
+                title="Citação"
+              >
+                &ldquo; Citação
+              </button>
 
-            <span className="h-5 w-[1px] bg-zinc-300 mx-1"></span>
+              <span className="h-5 w-[1px] bg-zinc-300 mx-1"></span>
 
-            <button
-              type="button"
-              onClick={() => aplicarComando("undo")}
-              className="rounded p-1.5 hover:bg-zinc-200 text-sm cursor-pointer"
-              title="Desfazer"
-            >
-              ↩
-            </button>
-            <button
-              type="button"
-              onClick={() => aplicarComando("redo")}
-              className="rounded p-1.5 hover:bg-zinc-200 text-sm cursor-pointer"
-              title="Refazer"
-            >
-              ↪
-            </button>
+              <button
+                type="button"
+                onClick={() => aplicarComando("undo")}
+                className="rounded p-1.5 hover:bg-zinc-200 text-sm cursor-pointer"
+                title="Desfazer"
+              >
+                ↩
+              </button>
+              <button
+                type="button"
+                onClick={() => aplicarComando("redo")}
+                className="rounded p-1.5 hover:bg-zinc-200 text-sm cursor-pointer"
+                title="Refazer"
+              >
+                ↪
+              </button>
+            </div>
+
+            {/* Canvas do Editor */}
+            <div
+              ref={editorRef}
+              contentEditable
+              onInput={handleEditorInput}
+              suppressContentEditableWarning
+              className="min-h-[520px] max-w-none p-6 sm:p-8 focus:outline-none font-spectral text-zinc-900 leading-relaxed text-base sm:text-lg prose prose-zinc selection:bg-[#133C1B]/20"
+              data-placeholder="Comece a redigir seu artigo acadêmico aqui..."
+            />
+
+            {/* Rodapé do Editor */}
+            <div className="flex flex-wrap items-center justify-between border-t border-zinc-200 bg-zinc-50/90 px-4 py-2.5 text-xs text-zinc-500 font-karla">
+              <div className="flex items-center gap-4">
+                <span>{contagemPalavras} palavras</span>
+                <span>{contagemCaracteres} caracteres</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className={`h-2 w-2 rounded-full ${modificado ? "bg-amber-400" : "bg-emerald-500"}`}></span>
+                <span>{modificado ? "Alterações não salvas" : "Tudo salvo"}</span>
+              </div>
+            </div>
           </div>
 
-          {/* Canvas do Editor */}
-          <div
-            ref={editorRef}
-            contentEditable
-            onInput={handleEditorInput}
-            suppressContentEditableWarning
-            className="min-h-[520px] max-w-none p-6 sm:p-8 focus:outline-none font-spectral text-zinc-900 leading-relaxed text-base sm:text-lg prose prose-zinc selection:bg-[#133C1B]/20"
-            data-placeholder="Comece a redigir seu artigo acadêmico aqui..."
-          />
+          {/* Coluna Direita: Painel de Marcações e Comentários do Orientador */}
+          <aside className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
+              <div>
+                <h2 className="text-sm font-bold text-zinc-900 font-karla">
+                  Comentários do Orientador
+                </h2>
+                <p className="text-[11px] text-zinc-500 font-spectral">
+                  Trechos marcados no seu artigo
+                </p>
+              </div>
+              <span
+                className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold font-karla border ${
+                  comentariosPendentes.length > 0
+                    ? "bg-amber-100 text-amber-900 border-amber-300"
+                    : "bg-zinc-100 text-zinc-600 border-zinc-200"
+                }`}
+              >
+                {comentariosPendentes.length} pendente(s)
+              </span>
+            </div>
 
-          {/* Rodapé do Editor */}
-          <div className="flex flex-wrap items-center justify-between border-t border-zinc-200 bg-zinc-50/90 px-4 py-2.5 text-xs text-zinc-500 font-karla">
-            <div className="flex items-center gap-4">
-              <span>{contagemPalavras} palavras</span>
-              <span>{contagemCaracteres} caracteres</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className={`h-2 w-2 rounded-full ${modificado ? "bg-amber-400" : "bg-emerald-500"}`}></span>
-              <span>{modificado ? "Alterações não salvas" : "Tudo salvo"}</span>
-            </div>
-          </div>
+            {comentariosPendentes.length === 0 ? (
+              <div className="py-6 text-center space-y-1">
+                <p className="text-xs font-medium text-zinc-600 font-spectral">
+                  Nenhum comentário pendente para resolver!
+                </p>
+                <p className="text-[11px] text-zinc-400 font-spectral">
+                  Quando seu orientador destacar um trecho com cor (amarelo, vermelho, azul ou roxo) e comentar, ele aparecerá aqui.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
+                {comentariosPendentes.map((c) => {
+                  const corCfg = CORES_MARCACAO[c.cor] ?? CORES_MARCACAO.AMARELO;
+                  return (
+                    <div
+                      key={c.id}
+                      className={`rounded-xl border border-zinc-200 border-l-4 ${corCfg.borderClass} bg-zinc-50/60 p-3.5 space-y-2`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px] font-bold font-karla ${corCfg.badgeClass}`}>
+                          <span className={`h-2 w-2 rounded-full ${corCfg.dotClass}`} />
+                          Marcação {corCfg.nome}
+                        </span>
+                        <span className="text-[10px] text-zinc-400 font-spectral">
+                          {formatarDataHora(new Date(c.criadoEm))}
+                        </span>
+                      </div>
+
+                      <blockquote className={`rounded-lg px-2.5 py-1.5 text-xs font-spectral italic line-clamp-3 ${corCfg.quoteBgClass}`}>
+                        &ldquo;{c.trecho}&rdquo;
+                      </blockquote>
+
+                      <p className="text-xs sm:text-sm text-zinc-800 font-spectral">
+                        {c.comentario}
+                      </p>
+
+                      <div className="flex justify-end pt-1 border-t border-zinc-200/60">
+                        <button
+                          type="button"
+                          onClick={() => handleResolverComentario(c.id)}
+                          disabled={resolvendo}
+                          className="inline-flex items-center gap-1 rounded-lg bg-[#133C1B] px-3 py-1.5 text-[11px] font-semibold text-white hover:bg-[#1a4f24] transition-colors font-karla cursor-pointer disabled:opacity-50"
+                        >
+                          ✓ Marcar como resolvido
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {comentariosResolvidos.length > 0 && (
+              <details className="pt-2 border-t border-zinc-100">
+                <summary className="cursor-pointer text-xs font-semibold text-zinc-500 hover:text-zinc-800 font-karla">
+                  Ver {comentariosResolvidos.length} comentário(s) já resolvido(s)
+                </summary>
+                <div className="mt-2.5 space-y-2">
+                  {comentariosResolvidos.map((c) => (
+                    <div
+                      key={c.id}
+                      className="rounded-xl border border-zinc-100 bg-zinc-50 p-2.5 text-xs text-zinc-400 space-y-1"
+                    >
+                      <span className="font-semibold text-emerald-700 font-karla">✓ Resolvido</span>
+                      <p className="italic line-clamp-1">&ldquo;{c.trecho}&rdquo;</p>
+                      <p className="text-zinc-600">{c.comentario}</p>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
+          </aside>
         </div>
       )}
     </div>
