@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 import type { NotificacaoItem } from "@/lib/dados-alertas";
-import { buscarNotificacoesProfessor } from "@/lib/actions/alertas";
+import { buscarNotificacoesProfessor, buscarNotificacoesAluno, marcarNotificacaoAlunoComoLida, resolverAlertaAluno } from "@/lib/actions/alertas";
 
 interface TopbarHeaderProps {
   userName?: string | null;
@@ -42,6 +42,12 @@ const ALUNO_LINKS_CONFIG = [
 ];
 function renderNavIcon(href: string) {
   switch (href) {
+    case "/alertas":
+      return (
+        <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+        </svg>
+      );
     case "/painel":
       return (
         <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
@@ -150,23 +156,46 @@ export function TopbarHeader({
     }
   }, [notificacoesKey]);
 
-  // Polling em background para o orientador verificar alertas em tempo real
+  // Polling em background para orientador e aluno verificarem notificações em tempo real
   useEffect(() => {
-    if (role !== "PROFESSOR") return;
-    const interval = setInterval(async () => {
-      try {
-        const atualizadas = await buscarNotificacoesProfessor();
-        if (atualizadas) {
-          setNotificacoesState(atualizadas);
+    if (role === "PROFESSOR") {
+      const interval = setInterval(async () => {
+        try {
+          const atualizadas = await buscarNotificacoesProfessor();
+          if (atualizadas) {
+            setNotificacoesState(atualizadas);
+          }
+        } catch {
+          // Silencioso
         }
-      } catch {
-        // Silencioso em caso de erro no polling
-      }
-    }, 30000);
-    return () => clearInterval(interval);
+      }, 25000);
+      return () => clearInterval(interval);
+    } else if (role === "ALUNO") {
+      const interval = setInterval(async () => {
+        try {
+          const atualizadas = await buscarNotificacoesAluno();
+          if (atualizadas) {
+            setNotificacoesState(atualizadas);
+          }
+        } catch {
+          // Silencioso
+        }
+      }, 10000);
+      return () => clearInterval(interval);
+    }
   }, [role]);
 
-  const activeCenterTitle = centerTitle ?? (pathname === "/producao" ? "Suas Produções" : pathname === "/painel" ? "Painel de Orientandos" : pathname?.startsWith("/alunos/") ? "Acompanhamento Individual" : null);
+  const activeCenterTitle =
+    centerTitle ??
+    (pathname === "/producao"
+      ? "Suas Produções"
+      : pathname === "/painel"
+      ? "Painel de Orientandos"
+      : pathname === "/alertas"
+      ? "Alertas"
+      : pathname?.startsWith("/alunos/")
+      ? "Acompanhamento Individual"
+      : null);
 
   const isAluno = role === "ALUNO";
   const homeHref = isAluno ? "/inicio" : "/painel";
@@ -242,7 +271,7 @@ export function TopbarHeader({
             {/* Ícone de sino com popup hover de notificações */}
             <div className="relative group">
               <Link
-                href={isAluno ? "/inicio" : "/alertas"}
+                href="/alertas"
                 className="relative flex h-10 w-10 items-center justify-center rounded-full text-white transition-colors hover:bg-white/10 active:scale-95 focus:outline-none cursor-pointer"
                 aria-label="Alertas e Notificações"
                 title="Alertas e Notificações"
@@ -281,14 +310,12 @@ export function TopbarHeader({
                         </span>
                       )}
                     </div>
-                    {!isAluno && (
-                      <Link
-                        href="/alertas"
-                        className="text-[11px] font-semibold text-[#133C1B] hover:underline font-karla"
-                      >
-                        Ver alertas →
-                      </Link>
-                    )}
+                    <Link
+                      href="/alertas"
+                      className="text-[11px] font-semibold text-[#133C1B] hover:underline font-karla"
+                    >
+                      Ver todos os alertas →
+                    </Link>
                   </div>
 
                   {notificacoesState.length === 0 ? (
@@ -312,7 +339,47 @@ export function TopbarHeader({
                                 {notif.mensagem}
                               </p>
                               <div className="flex items-center justify-between mt-1 text-[11px] text-zinc-500 font-spectral">
-                                {notif.alunoId ? (
+                                {isAluno ? (
+                                  <div className="flex items-center gap-2">
+                                    <Link
+                                      href={notif.link ?? "/alertas"}
+                                      onClick={async () => {
+                                        try {
+                                          if (notif.tipo === "NOVA_MARCACAO") {
+                                            await marcarNotificacaoAlunoComoLida(notif.id);
+                                          }
+                                          setNotificacoesState((prev) => prev.filter((n) => n.id !== notif.id));
+                                        } catch {}
+                                      }}
+                                      className="text-[#133C1B] font-semibold hover:underline font-karla"
+                                    >
+                                      {notif.tipo === "NOVA_MARCACAO"
+                                        ? "Ver artigo →"
+                                        : notif.link?.includes("/producao")
+                                        ? "Ver produção →"
+                                        : notif.tipo === "DIAS_SEM_REUNIAO"
+                                        ? "Agendar reunião →"
+                                        : "Acessar →"}
+                                    </Link>
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        try {
+                                          if (notif.tipo === "NOVA_MARCACAO") {
+                                            await marcarNotificacaoAlunoComoLida(notif.id);
+                                          } else {
+                                            await resolverAlertaAluno(notif.id);
+                                          }
+                                          setNotificacoesState((prev) => prev.filter((n) => n.id !== notif.id));
+                                        } catch {}
+                                      }}
+                                      className="text-[10px] text-zinc-400 hover:text-zinc-600 font-karla cursor-pointer"
+                                      title="Marcar como lida"
+                                    >
+                                      ✓ Lida
+                                    </button>
+                                  </div>
+                                ) : notif.alunoId ? (
                                   <Link
                                     href={`/alunos/${notif.alunoId}`}
                                     className="text-[#133C1B] font-medium hover:underline font-karla"
@@ -320,7 +387,7 @@ export function TopbarHeader({
                                     Acessar orientando →
                                   </Link>
                                 ) : <span />}
-                                <span className="text-[10px] text-zinc-400">
+                                <span className="text-[10px] text-zinc-400" suppressHydrationWarning>
                                   {new Date(notif.criadoEm).toLocaleDateString("pt-BR", {
                                     day: "2-digit",
                                     month: "2-digit",

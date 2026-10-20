@@ -44,29 +44,29 @@ const CORES_MARCACAO: Record<
     quoteBgClass: string;
   }
 > = {
+  AZUL: {
+    nome: "Leve",
+    dotClass: "bg-blue-400 border-blue-600",
+    badgeClass: "bg-blue-100 text-blue-900 border-blue-300",
+    borderClass: "border-l-blue-400",
+    quoteBgClass: "bg-blue-100/80 text-blue-950",
+  },
   AMARELO: {
-    nome: "Amarelo",
+    nome: "Moderado",
     dotClass: "bg-yellow-400 border-yellow-600",
     badgeClass: "bg-yellow-100 text-yellow-900 border-yellow-300",
     borderClass: "border-l-yellow-400",
     quoteBgClass: "bg-yellow-100/80 text-yellow-950",
   },
   VERMELHO: {
-    nome: "Vermelho",
+    nome: "Grave",
     dotClass: "bg-red-400 border-red-600",
     badgeClass: "bg-red-100 text-red-900 border-red-300",
     borderClass: "border-l-red-400",
     quoteBgClass: "bg-red-100/80 text-red-950",
   },
-  AZUL: {
-    nome: "Azul",
-    dotClass: "bg-blue-400 border-blue-600",
-    badgeClass: "bg-blue-100 text-blue-900 border-blue-300",
-    borderClass: "border-l-blue-400",
-    quoteBgClass: "bg-blue-100/80 text-blue-950",
-  },
   ROXO: {
-    nome: "Roxo",
+    nome: "Alteração Opcional",
     dotClass: "bg-purple-400 border-purple-600",
     badgeClass: "bg-purple-100 text-purple-900 border-purple-300",
     borderClass: "border-l-purple-400",
@@ -110,31 +110,32 @@ export function EditorContent({ producao }: { producao: Producao }) {
   const [abaAtiva, setAbaAtiva] = useState<"editor" | "docs" | "overleaf">("editor");
   const [modificado, setModificado] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
-
-  // Inicializa o conteúdo do editor contentEditable
-  useEffect(() => {
-    if (editorRef.current && !editorRef.current.innerHTML) {
-      editorRef.current.innerHTML = producao.conteudo || "<p><br></p>";
-    }
-  }, [producao.conteudo]);
+  const initialHtmlRef = useRef(producao.conteudo || "<p><br></p>");
 
   // Sincroniza novos comentários/marcações do orientador em tempo real quando o aluno não tiver edições não salvas
   useEffect(() => {
+    let montado = true;
     const interval = setInterval(async () => {
       try {
         const res = await obterComentariosProducaoAluno(producao.id);
+        if (!montado) return;
         if (res.comentariosJson !== comentariosJson) {
           setComentariosJson(res.comentariosJson);
           if (!modificado && res.conteudo && editorRef.current) {
             setConteudo(res.conteudo);
-            editorRef.current.innerHTML = res.conteudo;
+            if (editorRef.current.innerHTML !== res.conteudo) {
+              editorRef.current.innerHTML = res.conteudo;
+            }
           }
         }
       } catch {
         // Silencioso no polling
       }
     }, 6000);
-    return () => clearInterval(interval);
+    return () => {
+      montado = false;
+      clearInterval(interval);
+    };
   }, [producao.id, comentariosJson, modificado]);
 
   const listaComentarios = parseComentarios(comentariosJson);
@@ -288,7 +289,7 @@ export function EditorContent({ producao }: { producao: Producao }) {
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
             </svg>
-            Voltar para Suas Produções
+            <span>Voltar para Suas Produções</span>
           </Link>
           <div className="flex flex-wrap items-center gap-2.5 pt-1">
             <h1 className="text-xl sm:text-2xl font-bold text-zinc-900 font-karla">
@@ -300,7 +301,7 @@ export function EditorContent({ producao }: { producao: Producao }) {
             {producao.overleafUrl && (
               <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-[#138A07] font-karla border border-emerald-200">
                 <OverleafIcon className="h-3.5 w-3.5" />
-                Overleaf Vinculado
+                <span>Overleaf Vinculado</span>
               </span>
             )}
             {producao.googleDocsUrl && (
@@ -308,7 +309,7 @@ export function EditorContent({ producao }: { producao: Producao }) {
                 <svg className="h-3 w-3 text-blue-600" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm4 18H6V4h7v5h5v11z" />
                 </svg>
-                Google Docs Vinculado
+                <span>Google Docs Vinculado</span>
               </span>
             )}
             {!producao.overleafUrl && !producao.googleDocsUrl && (
@@ -323,16 +324,20 @@ export function EditorContent({ producao }: { producao: Producao }) {
                   : "bg-zinc-100 text-zinc-600 border-zinc-200"
               }`}
             >
-              {comentariosPendentes.length}{" "}
-              {comentariosPendentes.length === 1
-                ? "comentário para resolver"
-                : "comentários para resolver"}
+              <span>{`${comentariosPendentes.length} ${
+                comentariosPendentes.length === 1
+                  ? "comentário para resolver"
+                  : "comentários para resolver"
+              }`}</span>
             </span>
           </div>
           {producao.venue && (
             <p className="text-xs text-zinc-500 font-spectral">
-              Publicação/Evento: <span className="font-medium text-zinc-700">{producao.venue}</span>
-              {producao.prazoSubmissao && ` · Prazo: ${formatarData(new Date(producao.prazoSubmissao))}`}
+              <span>Publicação/Evento: </span>
+              <span className="font-medium text-zinc-700">{producao.venue}</span>
+              {producao.prazoSubmissao && (
+                <span>{` · Prazo: ${formatarData(new Date(producao.prazoSubmissao))}`}</span>
+              )}
             </p>
           )}
         </div>
@@ -570,8 +575,13 @@ export function EditorContent({ producao }: { producao: Producao }) {
       )}
 
       {/* Editor Principal + Painel de Marcações e Comentários do Orientador */}
-      {(abaAtiva === "editor" || (!producao.googleDocsUrl && !producao.overleafUrl)) && (
-        <div className="grid gap-6 lg:grid-cols-[1fr_340px] items-start">
+      <div
+        className={`grid gap-6 lg:grid-cols-[1fr_340px] items-start ${
+          abaAtiva === "editor" || (!producao.googleDocsUrl && !producao.overleafUrl)
+            ? ""
+            : "hidden"
+        }`}
+      >
           {/* Coluna Esquerda: Editor */}
           <div className="rounded-2xl border border-zinc-200 bg-white shadow-xs overflow-hidden">
             {/* Barra de Ferramentas de Formatação */}
@@ -697,6 +707,7 @@ export function EditorContent({ producao }: { producao: Producao }) {
               contentEditable
               onInput={handleEditorInput}
               suppressContentEditableWarning
+              dangerouslySetInnerHTML={{ __html: initialHtmlRef.current }}
               className="min-h-[520px] max-w-none p-6 sm:p-8 focus:outline-none font-spectral text-zinc-900 leading-relaxed text-base sm:text-lg prose prose-zinc selection:bg-[#133C1B]/20"
               data-placeholder="Comece a redigir seu artigo acadêmico aqui..."
             />
@@ -704,8 +715,8 @@ export function EditorContent({ producao }: { producao: Producao }) {
             {/* Rodapé do Editor */}
             <div className="flex flex-wrap items-center justify-between border-t border-zinc-200 bg-zinc-50/90 px-4 py-2.5 text-xs text-zinc-500 font-karla">
               <div className="flex items-center gap-4">
-                <span>{contagemPalavras} palavras</span>
-                <span>{contagemCaracteres} caracteres</span>
+                <span>{`${contagemPalavras} palavras`}</span>
+                <span>{`${contagemCaracteres} caracteres`}</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className={`h-2 w-2 rounded-full ${modificado ? "bg-amber-400" : "bg-emerald-500"}`}></span>
@@ -732,7 +743,7 @@ export function EditorContent({ producao }: { producao: Producao }) {
                     : "bg-zinc-100 text-zinc-600 border-zinc-200"
                 }`}
               >
-                {comentariosPendentes.length} pendente(s)
+                {`${comentariosPendentes.length} pendente(s)`}
               </span>
             </div>
 
@@ -742,13 +753,13 @@ export function EditorContent({ producao }: { producao: Producao }) {
                   Nenhum comentário pendente para resolver!
                 </p>
                 <p className="text-[11px] text-zinc-400 font-spectral">
-                  Quando seu orientador destacar um trecho com cor (amarelo, vermelho, azul ou roxo) e comentar, ele aparecerá aqui.
+                  Quando seu orientador destacar um trecho com cor (Leve, Moderado, Grave ou Alteração Opcional) e comentar, ele aparecerá aqui.
                 </p>
               </div>
             ) : (
               <div className="space-y-3 max-h-[500px] overflow-y-auto pr-1">
                 {comentariosPendentes.map((c) => {
-                  const corCfg = CORES_MARCACAO[c.cor] ?? CORES_MARCACAO.AMARELO;
+                  const corCfg = CORES_MARCACAO[c.cor] ?? CORES_MARCACAO.AZUL;
                   return (
                     <div
                       key={c.id}
@@ -791,7 +802,7 @@ export function EditorContent({ producao }: { producao: Producao }) {
             {comentariosResolvidos.length > 0 && (
               <details className="pt-2 border-t border-zinc-100">
                 <summary className="cursor-pointer text-xs font-semibold text-zinc-500 hover:text-zinc-800 font-karla">
-                  Ver {comentariosResolvidos.length} comentário(s) já resolvido(s)
+                  {`Ver ${comentariosResolvidos.length} comentário(s) já resolvido(s)`}
                 </summary>
                 <div className="mt-2.5 space-y-2">
                   {comentariosResolvidos.map((c) => (
@@ -809,7 +820,6 @@ export function EditorContent({ producao }: { producao: Producao }) {
             )}
           </aside>
         </div>
-      )}
     </div>
   );
 }

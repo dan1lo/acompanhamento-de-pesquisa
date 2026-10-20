@@ -7,7 +7,7 @@ import { requireAluno, requireProfessor } from "@/lib/guards";
 import { auth } from "@/lib/auth";
 import { parseDataLocal } from "@/lib/datas";
 
-export type CorMarcacao = "AMARELO" | "VERMELHO" | "AZUL" | "ROXO";
+export type CorMarcacao = "AZUL" | "AMARELO" | "VERMELHO" | "ROXO";
 
 export interface ComentarioArtigo {
   id: string;

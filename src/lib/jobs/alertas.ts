@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { diasDesdeUltimaReuniao, LIMITES_PADRAO, statusAutomatico } from "@/lib/status";
+import { garantirAlertasAluno } from "@/lib/dados-alertas";
 
 const JANELA_DEDUP_HORAS = 20;
 const DIAS_PRAZO_PROXIMO = 7;
@@ -29,22 +30,8 @@ export async function gerarAlertas(): Promise<{ criados: number }> {
   const emBreve = new Date(agora.getTime() + DIAS_PRAZO_PROXIMO * 24 * 60 * 60 * 1000);
 
   for (const aluno of alunos) {
-    const config = aluno.orientador.configAlertas.find((c) => c.nivel === aluno.nivel);
-    const limites = config ? { atencao: config.diasAtencao, critico: config.diasCritico } : LIMITES_PADRAO[aluno.nivel];
-    const ultimaReuniao = aluno.reunioes[0]?.data ?? null;
-    const dias = diasDesdeUltimaReuniao(ultimaReuniao, aluno.dataInicio);
-    const status = statusAutomatico(dias, limites);
-
-    if (status !== "OK" && !(await jaAlertadoRecentemente(aluno.id, "DIAS_SEM_REUNIAO"))) {
-      await prisma.alerta.create({
-        data: {
-          alunoId: aluno.id,
-          tipo: "DIAS_SEM_REUNIAO",
-          mensagem: `${dias} dias sem reunião (status ${status === "CRITICO" ? "crítico" : "atenção"})`,
-        },
-      });
-      criados++;
-    }
+    // Garante os alertas de reunião (1 semana, 15 dias, 1 mês) e de produções acadêmicas
+    await garantirAlertasAluno(aluno.id, aluno.nome);
 
     for (const tarefa of aluno.tarefas) {
       if (tarefa.prazo && tarefa.prazo < agora) {

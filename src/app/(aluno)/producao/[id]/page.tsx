@@ -12,6 +12,17 @@ export default async function ProducaoEditorPage(props: PageProps) {
   const { id } = await props.params;
   const { aluno } = await requireAluno();
 
+  // Marca notificações desta produção como lidas diretamente no banco sem disparar revalidatePath durante o render
+  try {
+    await prisma.$executeRawUnsafe(
+      `UPDATE notificacao_aluno SET lida = true WHERE "producaoId" = $1 AND "alunoId" = $2`,
+      id,
+      aluno.id
+    );
+  } catch {
+    // Silencioso se tabela não existir
+  }
+
   const producao = await prisma.producaoAcademica.findUnique({
     where: { id },
   });

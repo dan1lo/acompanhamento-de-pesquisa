@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useTransition } from "react";
 import { atualizarStatusManual } from "@/lib/actions/notas";
+import { finalizarSessaoMarcacoes } from "@/lib/actions/alertas";
 import {
   atualizarStatusProducao,
   obterProducaoTempoRealProfessor,
@@ -65,8 +66,16 @@ export const CORES_MARCACAO: Record<
     quoteBgClass: string;
   }
 > = {
+  AZUL: {
+    nome: "Leve",
+    bgHex: "#BFDBFE",
+    dotClass: "bg-blue-400 border-blue-600",
+    badgeClass: "bg-blue-100 text-blue-900 border-blue-300",
+    borderClass: "border-l-blue-400",
+    quoteBgClass: "bg-blue-100/80 text-blue-950",
+  },
   AMARELO: {
-    nome: "Amarelo",
+    nome: "Moderado",
     bgHex: "#FEF08A",
     dotClass: "bg-yellow-400 border-yellow-600",
     badgeClass: "bg-yellow-100 text-yellow-900 border-yellow-300",
@@ -74,23 +83,15 @@ export const CORES_MARCACAO: Record<
     quoteBgClass: "bg-yellow-100/80 text-yellow-950",
   },
   VERMELHO: {
-    nome: "Vermelho",
+    nome: "Grave",
     bgHex: "#FECACA",
     dotClass: "bg-red-400 border-red-600",
     badgeClass: "bg-red-100 text-red-900 border-red-300",
     borderClass: "border-l-red-400",
     quoteBgClass: "bg-red-100/80 text-red-950",
   },
-  AZUL: {
-    nome: "Azul",
-    bgHex: "#BFDBFE",
-    dotClass: "bg-blue-400 border-blue-600",
-    badgeClass: "bg-blue-100 text-blue-900 border-blue-300",
-    borderClass: "border-l-blue-400",
-    quoteBgClass: "bg-blue-100/80 text-blue-950",
-  },
   ROXO: {
-    nome: "Roxo",
+    nome: "Alteração Opcional",
     bgHex: "#E9D5FF",
     dotClass: "bg-purple-400 border-purple-600",
     badgeClass: "bg-purple-100 text-purple-900 border-purple-300",
@@ -380,13 +381,19 @@ export function CardProducoesAluno({
   const [isPendingStatus, startStatusTransition] = useTransition();
   const [salvandoComentario, startComentarioTransition] = useTransition();
 
+  // Contador de marcações feitas DURANTE A SESSÃO ATUAL do orientador neste artigo
+  const sessaoMarcacoesRef = useRef<{ producaoId: string; contador: number }>({
+    producaoId: "",
+    contador: 0,
+  });
+
   // Estados para o fluxo em 2 etapas:
   // 1) Seleciona trecho com o mouse -> aparece pequeno modal flutuante com botão preto "Comentar" próximo ao trecho
   // 2) Clica em "Comentar" -> abre o card de customização (escolha de cor + texto do comentário)
   const [trechoSelecionado, setTrechoSelecionado] = useState<string>("");
   const [posicaoPopover, setPosicaoPopover] = useState<{ top: number; left: number } | null>(null);
   const [cardCustomizacaoAberto, setCardCustomizacaoAberto] = useState<boolean>(false);
-  const [corSelecionada, setCorSelecionada] = useState<CorMarcacao>("AMARELO");
+  const [corSelecionada, setCorSelecionada] = useState<CorMarcacao>("AZUL");
   const [textoComentario, setTextoComentario] = useState<string>("");
 
   const artigoBodyRef = useRef<HTMLDivElement>(null);
@@ -430,6 +437,19 @@ export function CardProducoesAluno({
     return () => clearInterval(interval);
   }, [artigoAberto?.id, trechoSelecionado, cardCustomizacaoAberto]);
 
+  // Finaliza a sessão quando o componente desmontar se houver marcações pendentes de notificação
+  useEffect(() => {
+    return () => {
+      if (sessaoMarcacoesRef.current.contador > 0 && sessaoMarcacoesRef.current.producaoId) {
+        finalizarSessaoMarcacoes(
+          sessaoMarcacoesRef.current.producaoId,
+          sessaoMarcacoesRef.current.contador
+        ).catch(console.error);
+        sessaoMarcacoesRef.current = { producaoId: "", contador: 0 };
+      }
+    };
+  }, []);
+
   // Fechar visualizador com ESC
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -442,10 +462,7 @@ export function CardProducoesAluno({
           setPosicaoPopover(null);
           setTrechoSelecionado("");
         } else if (artigoAberto) {
-          setArtigoAberto(null);
-          setTrechoSelecionado("");
-          setPosicaoPopover(null);
-          setCardCustomizacaoAberto(false);
+          fecharVisualizadorArtigo();
         }
       }
     }
@@ -503,6 +520,20 @@ export function CardProducoesAluno({
       window.removeEventListener("mouseup", handleMouseUpGlobal);
     };
   }, [artigoAberto, cardCustomizacaoAberto]);
+
+  function fecharVisualizadorArtigo() {
+    if (sessaoMarcacoesRef.current.contador > 0 && sessaoMarcacoesRef.current.producaoId) {
+      finalizarSessaoMarcacoes(
+        sessaoMarcacoesRef.current.producaoId,
+        sessaoMarcacoesRef.current.contador
+      ).catch(console.error);
+      sessaoMarcacoesRef.current = { producaoId: "", contador: 0 };
+    }
+    setArtigoAberto(null);
+    setTrechoSelecionado("");
+    setPosicaoPopover(null);
+    setCardCustomizacaoAberto(false);
+  }
 
   function handleMudarStatusProducao(
     producaoId: string,
@@ -595,6 +626,9 @@ export function CardProducoesAluno({
 
     const comentarioFinal = textoComentario.trim() || "Trecho destacado pelo orientador";
 
+    // Incrementa o contador de novas marcações da sessão atual
+    sessaoMarcacoesRef.current.contador += 1;
+
     startComentarioTransition(async () => {
       const res = await adicionarMarcacaoComentarioProfessor(artigoAberto.id, {
         id: markId,
@@ -682,7 +716,7 @@ export function CardProducoesAluno({
           </p>
         </div>
         <span className="inline-flex items-center self-start sm:self-auto rounded-full bg-[#133C1B]/10 px-3 py-1 text-xs font-bold text-[#133C1B] font-karla">
-          {producoes.length} {producoes.length === 1 ? "trabalho" : "trabalhos"}
+          {`${producoes.length} ${producoes.length === 1 ? "trabalho" : "trabalhos"}`}
         </span>
       </div>
 
@@ -786,7 +820,7 @@ export function CardProducoesAluno({
                       <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
                       </svg>
-                      {pendentes} {pendentes === 1 ? "comentário para resolver" : "comentários para resolver"}
+                      {`${pendentes} ${pendentes === 1 ? "comentário para resolver" : "comentários para resolver"}`}
                     </span>
                   </div>
                 </div>
@@ -837,6 +871,13 @@ export function CardProducoesAluno({
                     <button
                       type="button"
                       onClick={() => {
+                        if (sessaoMarcacoesRef.current.contador > 0 && sessaoMarcacoesRef.current.producaoId) {
+                          finalizarSessaoMarcacoes(
+                            sessaoMarcacoesRef.current.producaoId,
+                            sessaoMarcacoesRef.current.contador
+                          ).catch(console.error);
+                        }
+                        sessaoMarcacoesRef.current = { producaoId: p.id, contador: 0 };
                         setTrechoSelecionado("");
                         setPosicaoPopover(null);
                         setCardCustomizacaoAberto(false);
@@ -890,10 +931,7 @@ export function CardProducoesAluno({
           className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/50 backdrop-blur-xs"
           onClick={(e) => {
             if (e.target === e.currentTarget) {
-              setArtigoAberto(null);
-              setTrechoSelecionado("");
-              setPosicaoPopover(null);
-              setCardCustomizacaoAberto(false);
+              fecharVisualizadorArtigo();
             }
           }}
         >
@@ -948,12 +986,7 @@ export function CardProducoesAluno({
                 )}
                 <button
                   type="button"
-                  onClick={() => {
-                    setArtigoAberto(null);
-                    setTrechoSelecionado("");
-                    setPosicaoPopover(null);
-                    setCardCustomizacaoAberto(false);
-                  }}
+                  onClick={fecharVisualizadorArtigo}
                   className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-200/70 hover:text-zinc-700 transition-colors cursor-pointer"
                   aria-label="Fechar visualizador"
                 >
@@ -1008,13 +1041,13 @@ export function CardProducoesAluno({
                       </blockquote>
                     </div>
 
-                    {/* Seletor das 4 cores: Amarelo, Vermelho, Azul, Roxo */}
+                    {/* Seletor das 4 cores: Azul (Leve), Amarelo (Moderado), Vermelho (Grave), Roxo (Alteração Opcional) */}
                     <div className="space-y-1.5">
                       <span className="block text-xs font-semibold text-zinc-700 font-karla">
-                        Cor da marcação:
+                        Tipo de marcação:
                       </span>
                       <div className="flex flex-wrap items-center gap-2">
-                        {(["AMARELO", "VERMELHO", "AZUL", "ROXO"] as CorMarcacao[]).map((cor) => {
+                        {(["AZUL", "AMARELO", "VERMELHO", "ROXO"] as CorMarcacao[]).map((cor) => {
                           const cfg = CORES_MARCACAO[cor];
                           const ativa = corSelecionada === cor;
                           return (

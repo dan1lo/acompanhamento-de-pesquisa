@@ -58,21 +58,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           href={initialFavicon}
           type="image/png"
         />
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              (function() {
-                try {
-                  var isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-                  var fav = document.getElementById('app-favicon');
-                  if (fav && isDark) {
-                    fav.href = '/icon-dark.png?v=dark';
-                  }
-                } catch(e) {}
-              })();
-            `,
-          }}
-        />
       </head>
       <body className="min-h-full flex flex-col bg-zinc-50 text-zinc-900 font-spectral">
         <DynamicFavicon />

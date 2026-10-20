@@ -157,6 +157,7 @@ model Aluno {
   bemEstar       BemEstar[]
   alertas        Alerta[]
   coorientadores Coorientacao[]
+  notificacoes   NotificacaoAluno[]
 
   @@map("aluno")
 }
@@ -438,4 +439,17 @@ model ConexaoGoogle {
   professorId String  @unique
 
   @@map("conexao_google")
+}
+
+model NotificacaoAluno {
+  id         String   @id @default(cuid())
+  alunoId    String
+  producaoId String?
+  mensagem   String
+  lida       Boolean  @default(false)
+  criadoEm   DateTime @default(now())
+
+  aluno Aluno @relation(fields: [alunoId], references: [id], onDelete: Cascade)
+
+  @@map("notificacao_aluno")
 }

@@ -120,9 +120,10 @@ function ContadorDiasSemReuniao({
   dataReferencia?: string;
   diasIniciais: number;
 }) {
-  const [agora, setAgora] = useState<number>(Date.now());
+  const [agora, setAgora] = useState<number | null>(null);
 
   useEffect(() => {
+    setAgora(Date.now());
     // Atualiza o relógio a cada segundo para manter o contador e o ciclo de 24h em tempo real
     const timer = setInterval(() => {
       setAgora(Date.now());
@@ -131,7 +132,7 @@ function ContadorDiasSemReuniao({
   }, []);
 
   const { dias, horas, minutos, segundos } = useMemo(() => {
-    if (!dataReferencia) {
+    if (!dataReferencia || agora === null) {
       return { dias: diasIniciais, horas: 24, minutos: 0, segundos: 0 };
     }
     const refMs = new Date(dataReferencia).getTime();
@@ -168,8 +169,8 @@ function ContadorDiasSemReuniao({
   return (
     <div className="flex flex-col">
       <div className="flex items-center gap-1.5">
-        <span className={`text-sm ${corStatus}`}>
-          {dias} {dias === 1 ? "dia" : "dias"}
+        <span className={`text-sm ${corStatus}`} suppressHydrationWarning>
+          {`${dias} ${dias === 1 ? "dia" : "dias"}`}
         </span>
         {dias >= 7 && (
           <span
@@ -183,8 +184,9 @@ function ContadorDiasSemReuniao({
       <span
         className="text-[11px] text-zinc-400 font-mono tracking-tight"
         title="Tempo até contabilizar mais 24 horas sem reunião"
+        suppressHydrationWarning
       >
-        +1 em {pad(horas)}:{pad(minutos)}:{pad(segundos)}
+        {agora === null ? "\u00A0" : `+1 em ${pad(horas)}:${pad(minutos)}:${pad(segundos)}`}
       </span>
     </div>
   );
