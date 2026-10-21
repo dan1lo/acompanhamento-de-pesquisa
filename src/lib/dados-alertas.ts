@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { diasDesdeUltimaReuniao } from "@/lib/status";
+import { alunoTemOrientador } from "@/lib/guards";
 
 export interface NotificacaoItem {
   id: string;
@@ -111,6 +112,9 @@ export async function garantirAlertasAluno(alunoId: string, alunoNome: string) {
     const aluno = await prisma.aluno.findUnique({
       where: { id: alunoId },
       include: {
+        orientador: {
+          select: { email: true },
+        },
         reunioes: {
           where: { status: "REALIZADA" },
           orderBy: { data: "desc" },
@@ -120,7 +124,7 @@ export async function garantirAlertasAluno(alunoId: string, alunoNome: string) {
       },
     });
 
-    if (!aluno || aluno.arquivado) {
+    if (!aluno || aluno.arquivado || !alunoTemOrientador(aluno.orientador?.email)) {
       return;
     }
 
@@ -369,17 +373,34 @@ export async function obterNotificacoesAluno(alunoId: string): Promise<Notificac
     }
     const alertasAtivosUnicos = Array.from(alertasUnicosMap.values()).slice(0, 10);
 
-    const itensNotificacao: NotificacaoItem[] = rows.map((r) => ({
-      id: r.id,
-      tipo: "NOVA_MARCACAO",
-      mensagem: r.mensagem,
-      alunoId: r.alunoId,
-      alunoNome: aluno?.nome ?? "",
-      criadoEm: new Date(r.criadoEm).toISOString(),
-      resolvido: r.lida,
-      link: r.producaoId ? `/producao/${r.producaoId}` : "/producao",
-      linkRotulo: "Ver artigo",
-    }));
+    const itensNotificacao: NotificacaoItem[] = rows.map((r) => {
+      if (r.mensagem.includes("||| CONVITE_ORIENTACAO |||")) {
+        const parts = r.mensagem.split("|||").map((s) => s.trim());
+        return {
+          id: r.id,
+          tipo: "CONVITE_ORIENTACAO",
+          mensagem: parts[0],
+          alunoId: r.alunoId,
+          alunoNome: aluno?.nome ?? "",
+          criadoEm: new Date(r.criadoEm).toISOString(),
+          resolvido: r.lida,
+          link: "/alertas",
+          linkRotulo: "Ver convite",
+        };
+      }
+
+      return {
+        id: r.id,
+        tipo: "NOVA_MARCACAO",
+        mensagem: r.mensagem,
+        alunoId: r.alunoId,
+        alunoNome: aluno?.nome ?? "",
+        criadoEm: new Date(r.criadoEm).toISOString(),
+        resolvido: r.lida,
+        link: r.producaoId ? `/producao/${r.producaoId}` : "/producao",
+        linkRotulo: "Ver artigo",
+      };
+    });
 
     const itensAlerta: NotificacaoItem[] = alertasAtivosUnicos.map((a) => {
       let link = "/alertas";

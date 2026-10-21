@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { obterOuCriarSemOrientadorId } from "@/lib/guards";
 import { TopbarHeader } from "@/components/topbar-header";
 import {
   obterNotificacoesAluno,
@@ -24,6 +25,7 @@ const ROTULOS_TIPO: Record<string, string> = {
   FALTA_SEM_AVISO: "Falta sem aviso",
   CHECKIN_NAO_PREENCHIDO: "Check-in não preenchido",
   NOVA_MARCACAO: "Marcação em artigo",
+  CONVITE_ORIENTACAO: "Convite de orientação",
 };
 
 export default async function AlertasUniversalPage() {
@@ -56,7 +58,17 @@ export default async function AlertasUniversalPage() {
     }
 
     if (!aluno) {
-      redirect("/login");
+      const semOrientadorId = await obterOuCriarSemOrientadorId();
+      aluno = await prisma.aluno.create({
+        data: {
+          nome: usuario.nome,
+          email: usuario.email.toLowerCase().trim(),
+          nivel: "TCC",
+          dataInicio: new Date(),
+          orientadorId: semOrientadorId,
+          usuarioId: usuario.id,
+        },
+      });
     }
 
     // Notificações para o sininho da topbar (também verifica se há alerta de 1 semana sem reunião)
@@ -137,17 +149,35 @@ export default async function AlertasUniversalPage() {
           linkRotulo,
         };
       }),
-      ...notificacoesDb.map((n) => ({
-        id: n.id,
-        origem: "NOTIFICACAO" as const,
-        tipo: "NOVA_MARCACAO",
-        tipoRotulo: "Marcação em artigo",
-        mensagem: n.mensagem,
-        criadoEm: new Date(n.criadoEm).toISOString(),
-        resolvido: n.lida,
-        link: n.producaoId ? `/producao/${n.producaoId}` : "/producao",
-        linkRotulo: "Ver artigo",
-      })),
+      ...notificacoesDb.map((n) => {
+        const isConvite =
+          n.mensagem.includes("||| CONVITE_ORIENTACAO |||") || n.id.startsWith("conv_");
+
+        if (isConvite) {
+          const parts = n.mensagem.split("|||").map((s) => s.trim());
+          return {
+            id: n.id,
+            origem: "NOTIFICACAO" as const,
+            tipo: "CONVITE_ORIENTACAO",
+            tipoRotulo: "Convite de orientação",
+            mensagem: parts[0],
+            criadoEm: new Date(n.criadoEm).toISOString(),
+            resolvido: n.lida,
+          };
+        }
+
+        return {
+          id: n.id,
+          origem: "NOTIFICACAO" as const,
+          tipo: "NOVA_MARCACAO",
+          tipoRotulo: "Marcação em artigo",
+          mensagem: n.mensagem,
+          criadoEm: new Date(n.criadoEm).toISOString(),
+          resolvido: n.lida,
+          link: n.producaoId ? `/producao/${n.producaoId}` : "/producao",
+          linkRotulo: "Ver artigo",
+        };
+      }),
     ];
 
     itensAluno.sort(

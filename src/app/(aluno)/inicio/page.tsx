@@ -5,8 +5,68 @@ import { buscarProximaReuniaoDoAluno } from "@/lib/dados-alunos";
 import { formatarData, formatarDataHora } from "@/lib/datas";
 import { CheckinForm } from "./checkin-form";
 
+function SleepyFaceIcon({ className = "h-24 w-24" }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 80 80"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <circle
+        cx="40"
+        cy="44"
+        r="30"
+        fill="#F4F4F5"
+        stroke="#A1A1AA"
+        strokeWidth="2.5"
+      />
+      <path
+        d="M27 40C29 44 35 44 37 40"
+        stroke="#52525B"
+        strokeWidth="3"
+        strokeLinecap="round"
+      />
+      <path
+        d="M43 40C45 44 51 44 53 40"
+        stroke="#52525B"
+        strokeWidth="3"
+        strokeLinecap="round"
+      />
+      <ellipse cx="40" cy="55" rx="4.5" ry="6" fill="#52525B" />
+      <ellipse cx="23" cy="49" rx="3.5" ry="2" fill="#E4E4E7" />
+      <ellipse cx="57" cy="49" rx="3.5" ry="2" fill="#E4E4E7" />
+      <g fill="#71717A" className="font-karla font-bold">
+        <text x="56" y="24" fontSize="15" fontWeight="bold">
+          Z
+        </text>
+        <text x="65" y="16" fontSize="12" fontWeight="bold">
+          z
+        </text>
+        <text x="71" y="9" fontSize="9" fontWeight="bold">
+          z
+        </text>
+      </g>
+    </svg>
+  );
+}
+
 export default async function InicioAlunoPage() {
-  const { aluno } = await requireAluno();
+  const { aluno, temOrientador } = await requireAluno();
+
+  if (!temOrientador) {
+    return (
+      <div className="relative min-h-[calc(100vh-10rem)] flex flex-col pb-24 text-left">
+        <div className="flex flex-1 flex-col items-center justify-center py-20 sm:py-28 text-center my-auto">
+          <SleepyFaceIcon className="h-24 w-24 sm:h-28 sm:w-28 drop-shadow-xs transition-transform hover:scale-105 duration-300" />
+          <p className="mt-5 text-base sm:text-lg font-medium text-zinc-600 font-spectral">
+            Não tem nada aqui, pode ir dormir
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const proximaReuniao = await buscarProximaReuniaoDoAluno(aluno.id);
 
@@ -25,7 +85,11 @@ export default async function InicioAlunoPage() {
           <div className="text-sm">
             <p className="font-medium">{formatarDataHora(proximaReuniao.data)}</p>
             {proximaReuniao.meetLink && (
-              <a href={proximaReuniao.meetLink} target="_blank" className="text-blue-600 hover:underline">
+              <a
+                href={proximaReuniao.meetLink}
+                target="_blank"
+                className="text-blue-600 hover:underline"
+              >
                 Entrar no Google Meet
               </a>
             )}

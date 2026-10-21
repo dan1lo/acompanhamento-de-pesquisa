@@ -117,7 +117,7 @@ export async function resolverTodosAlertasAluno() {
 
   try {
     await prisma.$executeRawUnsafe(
-      `UPDATE notificacao_aluno SET lida = true WHERE "alunoId" = $1 AND lida = false`,
+      `UPDATE notificacao_aluno SET lida = true WHERE "alunoId" = $1 AND lida = false AND mensagem NOT LIKE '%CONVITE_ORIENTACAO%'`,
       aluno.id
     );
   } catch {

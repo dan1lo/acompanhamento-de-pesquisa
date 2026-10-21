@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { diasDesdeUltimaReuniao, LIMITES_PADRAO, statusAutomatico } from "@/lib/status";
 import { garantirAlertasAluno } from "@/lib/dados-alertas";
+import { alunoTemOrientador } from "@/lib/guards";
 
 const JANELA_DEDUP_HORAS = 20;
 const DIAS_PRAZO_PROXIMO = 7;
@@ -30,6 +31,10 @@ export async function gerarAlertas(): Promise<{ criados: number }> {
   const emBreve = new Date(agora.getTime() + DIAS_PRAZO_PROXIMO * 24 * 60 * 60 * 1000);
 
   for (const aluno of alunos) {
+    if (!alunoTemOrientador(aluno.orientador?.email)) {
+      continue;
+    }
+
     // Garante os alertas de reunião (1 semana, 15 dias, 1 mês) e de produções acadêmicas
     await garantirAlertasAluno(aluno.id, aluno.nome);
 

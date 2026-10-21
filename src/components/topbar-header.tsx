@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
 import type { NotificacaoItem } from "@/lib/dados-alertas";
 import { buscarNotificacoesProfessor, buscarNotificacoesAluno, marcarNotificacaoAlunoComoLida, resolverAlertaAluno } from "@/lib/actions/alertas";
+import { aceitarConviteOrientacao } from "@/lib/actions/convites";
 
 interface TopbarHeaderProps {
   userName?: string | null;
@@ -147,6 +148,7 @@ export function TopbarHeader({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notificacoesState, setNotificacoesState] = useState<NotificacaoItem[]>(() => notificacoes ?? []);
   const pathname = usePathname();
+  const router = useRouter();
 
   const notificacoesKey = notificacoes?.map((n) => n.id).join(",") ?? "";
 
@@ -340,45 +342,71 @@ export function TopbarHeader({
                               </p>
                               <div className="flex items-center justify-between mt-1 text-[11px] text-zinc-500 font-spectral">
                                 {isAluno ? (
-                                  <div className="flex items-center gap-2">
-                                    <Link
-                                      href={notif.link ?? "/alertas"}
-                                      onClick={async () => {
-                                        try {
-                                          if (notif.tipo === "NOVA_MARCACAO") {
-                                            await marcarNotificacaoAlunoComoLida(notif.id);
-                                          }
-                                          setNotificacoesState((prev) => prev.filter((n) => n.id !== notif.id));
-                                        } catch {}
-                                      }}
-                                      className="text-[#133C1B] font-semibold hover:underline font-karla"
-                                    >
-                                      {notif.tipo === "NOVA_MARCACAO"
-                                        ? "Ver artigo →"
-                                        : notif.link?.includes("/producao")
-                                        ? "Ver produção →"
-                                        : notif.tipo === "DIAS_SEM_REUNIAO"
-                                        ? "Agendar reunião →"
-                                        : "Acessar →"}
-                                    </Link>
-                                    <button
-                                      type="button"
-                                      onClick={async () => {
-                                        try {
-                                          if (notif.tipo === "NOVA_MARCACAO") {
-                                            await marcarNotificacaoAlunoComoLida(notif.id);
-                                          } else {
-                                            await resolverAlertaAluno(notif.id);
-                                          }
-                                          setNotificacoesState((prev) => prev.filter((n) => n.id !== notif.id));
-                                        } catch {}
-                                      }}
-                                      className="text-[10px] text-zinc-400 hover:text-zinc-600 font-karla cursor-pointer"
-                                      title="Marcar como lida"
-                                    >
-                                      ✓ Lida
-                                    </button>
-                                  </div>
+                                  notif.tipo === "CONVITE_ORIENTACAO" ? (
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        type="button"
+                                        onClick={async () => {
+                                          try {
+                                            await aceitarConviteOrientacao(notif.id);
+                                            setNotificacoesState((prev) =>
+                                              prev.filter((n) => n.id !== notif.id)
+                                            );
+                                            router.refresh();
+                                          } catch {}
+                                        }}
+                                        className="rounded-lg bg-[#133C1B] px-2.5 py-0.5 text-[11px] font-semibold text-white hover:bg-[#1a4f24] transition-colors font-karla cursor-pointer"
+                                      >
+                                        Aceitar convite
+                                      </button>
+                                      <Link
+                                        href="/alertas"
+                                        className="text-[#133C1B] font-semibold hover:underline font-karla"
+                                      >
+                                        Ver →
+                                      </Link>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-2">
+                                      <Link
+                                        href={notif.link ?? "/alertas"}
+                                        onClick={async () => {
+                                          try {
+                                            if (notif.tipo === "NOVA_MARCACAO") {
+                                              await marcarNotificacaoAlunoComoLida(notif.id);
+                                            }
+                                            setNotificacoesState((prev) => prev.filter((n) => n.id !== notif.id));
+                                          } catch {}
+                                        }}
+                                        className="text-[#133C1B] font-semibold hover:underline font-karla"
+                                      >
+                                        {notif.tipo === "NOVA_MARCACAO"
+                                          ? "Ver artigo →"
+                                          : notif.link?.includes("/producao")
+                                          ? "Ver produção →"
+                                          : notif.tipo === "DIAS_SEM_REUNIAO"
+                                          ? "Agendar reunião →"
+                                          : "Acessar →"}
+                                      </Link>
+                                      <button
+                                        type="button"
+                                        onClick={async () => {
+                                          try {
+                                            if (notif.tipo === "NOVA_MARCACAO") {
+                                              await marcarNotificacaoAlunoComoLida(notif.id);
+                                            } else {
+                                              await resolverAlertaAluno(notif.id);
+                                            }
+                                            setNotificacoesState((prev) => prev.filter((n) => n.id !== notif.id));
+                                          } catch {}
+                                        }}
+                                        className="text-[10px] text-zinc-400 hover:text-zinc-600 font-karla cursor-pointer"
+                                        title="Marcar como lida"
+                                      >
+                                        ✓ Lida
+                                      </button>
+                                    </div>
+                                  )
                                 ) : notif.alunoId ? (
                                   <Link
                                     href={`/alunos/${notif.alunoId}`}

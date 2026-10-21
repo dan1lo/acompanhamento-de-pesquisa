@@ -3,6 +3,11 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import Link from "next/link";
 import { StatusBadge } from "@/components/status-badge";
+import {
+  buscarUsuariosAlunosParaConvite,
+  enviarConviteOrientacao,
+  type UsuarioAlunoBuscaItem,
+} from "@/lib/actions/convites";
 
 export interface AlunoPainelItem {
   id: string;
@@ -195,13 +200,26 @@ function ContadorDiasSemReuniao({
 export function PainelContent({
   alunos,
   filtrosIniciais,
+  abrirModalAdicionarInicial = false,
 }: {
   alunos: AlunoPainelItem[];
   filtrosIniciais?: Partial<FiltrosState>;
+  abrirModalAdicionarInicial?: boolean;
 }) {
   const [busca, setBusca] = useState("");
   const [modalFiltrosAberto, setModalFiltrosAberto] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
+
+  // Estados do modal de Adicionar Aluno (Convite de orientação)
+  const [modalAdicionarAberto, setModalAdicionarAberto] = useState(abrirModalAdicionarInicial);
+  const [termoBuscaUsuario, setTermoBuscaUsuario] = useState("");
+  const [usuariosEncontrados, setUsuariosEncontrados] = useState<UsuarioAlunoBuscaItem[]>([]);
+  const [buscandoUsuarios, setBuscandoUsuarios] = useState(false);
+  const [usuarioSelecionado, setUsuarioSelecionado] = useState<UsuarioAlunoBuscaItem | null>(null);
+  const [nivelOrientacao, setNivelOrientacao] = useState<"TCC" | "MESTRADO" | "DOUTORADO">("TCC");
+  const [enviandoConvite, setEnviandoConvite] = useState(false);
+  const [erroConvite, setErroConvite] = useState<string | null>(null);
+  const [mensagemSucessoConvite, setMensagemSucessoConvite] = useState<string | null>(null);
 
   // Filtros ativos aplicados na tabela
   const [filtrosAtivos, setFiltrosAtivos] = useState<FiltrosState>({
@@ -212,20 +230,21 @@ export function PainelContent({
   // Filtros temporários dentro do modal antes de aplicar
   const [filtrosModal, setFiltrosModal] = useState<FiltrosState>(filtrosAtivos);
 
-  // Fechar modal com tecla ESC
+  // Fechar modais com tecla ESC
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape" && modalFiltrosAberto) {
-        setModalFiltrosAberto(false);
+      if (e.key === "Escape") {
+        if (modalFiltrosAberto) setModalFiltrosAberto(false);
+        if (modalAdicionarAberto && !enviandoConvite) setModalAdicionarAberto(false);
       }
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [modalFiltrosAberto]);
+  }, [modalFiltrosAberto, modalAdicionarAberto, enviandoConvite]);
 
-  // Bloquear rolagem do body quando modal estiver aberto
+  // Bloquear rolagem do body quando qualquer modal estiver aberto
   useEffect(() => {
-    if (modalFiltrosAberto) {
+    if (modalFiltrosAberto || modalAdicionarAberto) {
       document.body.style.overflow = "hidden";
     } else {
       document.body.style.overflow = "unset";
@@ -233,7 +252,37 @@ export function PainelContent({
     return () => {
       document.body.style.overflow = "unset";
     };
-  }, [modalFiltrosAberto]);
+  }, [modalFiltrosAberto, modalAdicionarAberto]);
+
+  // Buscar usuários alunos do Scholab quando o modal Adicionar Aluno estiver aberto
+  useEffect(() => {
+    if (!modalAdicionarAberto) return;
+
+    let cancelado = false;
+    setBuscandoUsuarios(true);
+
+    const timer = setTimeout(async () => {
+      try {
+        const lista = await buscarUsuariosAlunosParaConvite(termoBuscaUsuario);
+        if (!cancelado) {
+          setUsuariosEncontrados(lista);
+        }
+      } catch {
+        if (!cancelado) {
+          setUsuariosEncontrados([]);
+        }
+      } finally {
+        if (!cancelado) {
+          setBuscandoUsuarios(false);
+        }
+      }
+    }, 220);
+
+    return () => {
+      cancelado = true;
+      clearTimeout(timer);
+    };
+  }, [modalAdicionarAberto, termoBuscaUsuario]);
 
   // Contagem de filtros ativos (diferentes do padrão)
   const quantidadeFiltrosAtivos = useMemo(() => {
@@ -310,6 +359,37 @@ export function PainelContent({
     setModalFiltrosAberto(false);
   }
 
+  function handleAbrirModalAdicionar() {
+    setTermoBuscaUsuario("");
+    setUsuarioSelecionado(null);
+    setNivelOrientacao("TCC");
+    setErroConvite(null);
+    setModalAdicionarAberto(true);
+  }
+
+  async function handleEnviarConvite() {
+    if (!usuarioSelecionado) return;
+    setErroConvite(null);
+    setEnviandoConvite(true);
+    try {
+      await enviarConviteOrientacao(usuarioSelecionado.usuarioId, nivelOrientacao);
+      const nomeConvite = usuarioSelecionado.nome;
+      setModalAdicionarAberto(false);
+      setUsuarioSelecionado(null);
+      setTermoBuscaUsuario("");
+      setMensagemSucessoConvite(
+        `Convite de orientação enviado para ${nomeConvite}! O aluno poderá aceitá-lo na página de notificações.`
+      );
+      setTimeout(() => setMensagemSucessoConvite(null), 5000);
+    } catch (err) {
+      setErroConvite(
+        err instanceof Error ? err.message : "Não foi possível enviar o convite."
+      );
+    } finally {
+      setEnviandoConvite(false);
+    }
+  }
+
   return (
     <div className="relative min-h-[calc(100vh-10rem)] flex flex-col pb-24 text-left">
       {/* Descrição da página alinhada à esquerda abaixo da topbar */}
@@ -318,6 +398,19 @@ export function PainelContent({
           Acompanhe os trabalhos e prazos do(s) seu(s) orientando(s) com praticidade.
         </p>
       </div>
+
+      {mensagemSucessoConvite && (
+        <div className="mx-auto mb-6 w-full max-w-5xl rounded-xl border border-emerald-200 bg-emerald-50 p-3.5 text-sm text-emerald-800 font-spectral flex items-center justify-between shadow-2xs">
+          <span>{mensagemSucessoConvite}</span>
+          <button
+            type="button"
+            onClick={() => setMensagemSucessoConvite(null)}
+            className="text-emerald-700 hover:text-emerald-950 font-bold cursor-pointer ml-3"
+          >
+            ×
+          </button>
+        </div>
+      )}
 
       {/* Conteúdo principal: estado vazio se o orientador não tem nenhum aluno, ou painel com busca e tabela */}
       {alunos.length === 0 ? (
@@ -497,8 +590,9 @@ export function PainelContent({
       )}
 
       {/* Botão Adicionar Aluno fixo no canto inferior direito */}
-      <Link
-        href="/alunos/novo"
+      <button
+        type="button"
+        onClick={handleAbrirModalAdicionar}
         className="fixed bottom-6 right-6 sm:bottom-8 sm:right-8 z-40 flex items-center gap-2 rounded-full bg-[#133C1B] px-5 py-3.5 text-sm sm:text-base font-semibold text-white shadow-xl hover:bg-[#1a4f24] hover:shadow-2xl active:scale-95 transition-all font-karla tracking-wide cursor-pointer focus:outline-none focus:ring-4 focus:ring-[#133C1B]/30"
         aria-label="Adicionar Aluno"
       >
@@ -512,7 +606,214 @@ export function PainelContent({
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
         </svg>
         <span>Adicionar Aluno</span>
-      </Link>
+      </button>
+
+      {/* Modal de Adicionar Aluno (Convite de Orientação) */}
+      {modalAdicionarAberto && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs transition-opacity"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !enviandoConvite) {
+              setModalAdicionarAberto(false);
+            }
+          }}
+        >
+          <div className="relative w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-zinc-100 space-y-5 text-left max-h-[90vh] overflow-y-auto">
+            {/* Cabeçalho do Modal */}
+            <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
+              <div className="flex items-center gap-2">
+                <svg className="h-5 w-5 text-[#133C1B]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM4 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 0110.374 21c-2.331 0-4.512-.645-6.374-1.766z" />
+                </svg>
+                <h2 className="text-lg font-bold text-zinc-900 font-karla">
+                  Adicionar Aluno
+                </h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => !enviandoConvite && setModalAdicionarAberto(false)}
+                className="rounded-lg p-1.5 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-600 transition-colors cursor-pointer"
+                aria-label="Fechar"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <p className="text-xs sm:text-sm text-zinc-500 font-spectral">
+              Procure um usuário do Scholab por nome ou e-mail, selecione o nível de orientação e envie um convite.
+            </p>
+
+            {erroConvite && (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-3.5 py-2.5 text-xs font-medium text-red-700 font-karla">
+                {erroConvite}
+              </div>
+            )}
+
+            {/* Etapa 1: Busca / Seleção de Usuário */}
+            {!usuarioSelecionado ? (
+              <div className="space-y-3">
+                <label className="block text-xs font-bold uppercase tracking-wider text-zinc-600 font-karla">
+                  Procurar usuário do Scholab
+                </label>
+
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-zinc-400">
+                    <svg className="h-4.5 w-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                    </svg>
+                  </div>
+                  <input
+                    type="text"
+                    value={termoBuscaUsuario}
+                    onChange={(e) => setTermoBuscaUsuario(e.target.value)}
+                    placeholder="Buscar por nome ou e-mail..."
+                    autoFocus
+                    className="w-full rounded-xl border border-zinc-300 bg-white pl-10 pr-4 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-[#133C1B] focus:outline-none focus:ring-2 focus:ring-[#133C1B]/20 transition-all font-spectral"
+                  />
+                </div>
+
+                {/* Lista de resultados */}
+                <div className="max-h-60 overflow-y-auto rounded-xl border border-zinc-200 divide-y divide-zinc-100 bg-zinc-50/40">
+                  {buscandoUsuarios ? (
+                    <div className="py-8 text-center text-xs text-zinc-500 font-spectral">
+                      Procurando usuários...
+                    </div>
+                  ) : usuariosEncontrados.length === 0 ? (
+                    <div className="py-8 text-center text-xs text-zinc-500 font-spectral">
+                      Nenhum usuário aluno encontrado com esse nome ou e-mail.
+                    </div>
+                  ) : (
+                    usuariosEncontrados.map((u) => {
+                      const desabilitado = u.jaOrientandoDesteProfessor;
+                      return (
+                        <button
+                          key={u.usuarioId}
+                          type="button"
+                          disabled={desabilitado}
+                          onClick={() => {
+                            setUsuarioSelecionado(u);
+                            setErroConvite(null);
+                          }}
+                          className={`w-full flex items-center justify-between gap-3 px-4 py-3 text-left transition-colors ${
+                            desabilitado
+                              ? "opacity-60 cursor-not-allowed bg-zinc-100/60"
+                              : "hover:bg-emerald-50/60 cursor-pointer bg-white"
+                          }`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-semibold text-zinc-900 font-karla truncate">
+                              {u.nome}
+                            </p>
+                            <p className="text-xs text-zinc-500 font-spectral truncate">
+                              {u.email}
+                            </p>
+                          </div>
+
+                          <div className="shrink-0">
+                            {u.jaOrientandoDesteProfessor ? (
+                              <span className="rounded-full bg-zinc-200 px-2.5 py-0.5 text-[10px] font-bold text-zinc-700 font-karla">
+                                Já é seu orientando
+                              </span>
+                            ) : u.convitePendente ? (
+                              <span className="rounded-full bg-amber-100 border border-amber-200 px-2.5 py-0.5 text-[10px] font-bold text-amber-800 font-karla">
+                                Convite pendente
+                              </span>
+                            ) : (
+                              <span className="rounded-lg bg-[#133C1B]/10 px-2.5 py-1 text-xs font-semibold text-[#133C1B] font-karla">
+                                Selecionar
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            ) : (
+              /* Etapa 2: Usuário Selecionado + Escolha do Nível de Orientação */
+              <div className="space-y-5">
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-zinc-600 font-karla">
+                    Usuário selecionado
+                  </label>
+                  <div className="flex items-center justify-between gap-3 rounded-xl border border-[#133C1B]/30 bg-emerald-50/40 p-3.5">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold text-zinc-900 font-karla truncate">
+                        {usuarioSelecionado.nome}
+                      </p>
+                      <p className="text-xs text-zinc-600 font-spectral truncate">
+                        {usuarioSelecionado.email}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setUsuarioSelecionado(null);
+                        setErroConvite(null);
+                      }}
+                      disabled={enviandoConvite}
+                      className="rounded-lg border border-zinc-300 bg-white px-2.5 py-1 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 transition-colors font-karla cursor-pointer"
+                    >
+                      Trocar
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <label className="block text-xs font-bold uppercase tracking-wider text-zinc-600 font-karla">
+                    Nível de orientação
+                  </label>
+                  <div className="grid grid-cols-3 gap-2.5">
+                    {(
+                      [
+                        { id: "TCC", label: "TCC" },
+                        { id: "MESTRADO", label: "Mestrado" },
+                        { id: "DOUTORADO", label: "Doutorado" },
+                      ] as const
+                    ).map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setNivelOrientacao(item.id)}
+                        className={`rounded-xl border px-3 py-2.5 text-xs font-semibold font-karla transition-all cursor-pointer text-center ${
+                          nivelOrientacao === item.id
+                            ? "border-[#133C1B] bg-[#133C1B] text-white shadow-xs"
+                            : "border-zinc-200 bg-zinc-50/70 text-zinc-700 hover:bg-zinc-100"
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Rodapé do Modal de Adicionar Aluno */}
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-zinc-100">
+              <button
+                type="button"
+                onClick={() => setModalAdicionarAberto(false)}
+                disabled={enviandoConvite}
+                className="rounded-xl border border-zinc-300 bg-white px-5 py-2.5 text-sm font-semibold text-zinc-700 shadow-xs hover:bg-zinc-50 hover:text-zinc-900 active:scale-[0.99] transition-all font-karla cursor-pointer disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleEnviarConvite}
+                disabled={!usuarioSelecionado || enviandoConvite}
+                className="rounded-xl bg-[#133C1B] px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-[#1a4f24] active:scale-[0.99] transition-all font-karla cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {enviandoConvite ? "Enviando..." : "Enviar convite"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal de Filtros */}
       {modalFiltrosAberto && (

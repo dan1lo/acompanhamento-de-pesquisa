@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { formatarDataHora } from "@/lib/datas";
 import {
   resolverAlertaAluno,
@@ -9,6 +10,10 @@ import {
   gerarAlertasAlunoAgora,
   marcarNotificacaoAlunoComoLida,
 } from "@/lib/actions/alertas";
+import {
+  aceitarConviteOrientacao,
+  recusarConviteOrientacao,
+} from "@/lib/actions/convites";
 
 export interface AlertaAlunoItem {
   id: string;
@@ -60,6 +65,11 @@ const ESTILOS_TIPO: Record<
     badgeClass: "bg-emerald-50 text-[#133C1B] border-emerald-200",
     dotClass: "bg-[#138A07]",
   },
+  CONVITE_ORIENTACAO: {
+    borderClass: "border-l-[#133C1B]",
+    badgeClass: "bg-emerald-100 text-[#133C1B] border-emerald-300",
+    dotClass: "bg-[#138A07]",
+  },
 };
 
 function SleepyFaceIcon({ className = "h-24 w-24" }: { className?: string }) {
@@ -91,6 +101,7 @@ export function AlertasAlunoContent({
 }: {
   itensIniciais: AlertaAlunoItem[];
 }) {
+  const router = useRouter();
   const [itens, setItens] = useState<AlertaAlunoItem[]>(itensIniciais);
   const [filtro, setFiltro] = useState<"TODOS" | "PENDENTES" | "RESOLVIDOS">("PENDENTES");
   const [isPending, startTransition] = useTransition();
@@ -127,8 +138,50 @@ export function AlertasAlunoContent({
     });
   }
 
+  function handleAceitarConvite(item: AlertaAlunoItem) {
+    setItens((prev) =>
+      prev.map((i) =>
+        i.id === item.id
+          ? { ...i, resolvido: true, mensagem: `${i.mensagem} (Convite aceito)` }
+          : i
+      )
+    );
+    startTransition(async () => {
+      try {
+        await aceitarConviteOrientacao(item.id);
+        setMensagemSucesso("Convite aceito com sucesso! Seu orientador foi vinculado.");
+        setTimeout(() => setMensagemSucesso(null), 4000);
+        router.refresh();
+      } catch {
+        setItens(itensIniciais);
+      }
+    });
+  }
+
+  function handleRecusarConvite(item: AlertaAlunoItem) {
+    setItens((prev) =>
+      prev.map((i) =>
+        i.id === item.id
+          ? { ...i, resolvido: true, mensagem: `${i.mensagem} (Convite recusado)` }
+          : i
+      )
+    );
+    startTransition(async () => {
+      try {
+        await recusarConviteOrientacao(item.id);
+        setMensagemSucesso("Convite recusado.");
+        setTimeout(() => setMensagemSucesso(null), 3500);
+        router.refresh();
+      } catch {
+        setItens(itensIniciais);
+      }
+    });
+  }
+
   function handleResolverTodos() {
-    setItens((prev) => prev.map((i) => ({ ...i, resolvido: true })));
+    setItens((prev) =>
+      prev.map((i) => (i.tipo === "CONVITE_ORIENTACAO" ? i : { ...i, resolvido: true }))
+    );
     setMensagemSucesso("Todos os alertas foram marcados como lidos!");
     setTimeout(() => setMensagemSucesso(null), 3500);
     startTransition(async () => {
@@ -302,30 +355,58 @@ export function AlertasAlunoContent({
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2 shrink-0 border-t border-zinc-100 sm:border-t-0 pt-2 sm:pt-0">
-                  {item.link && (
-                    <Link
-                      href={item.link}
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-100 transition-colors font-karla"
-                    >
-                      <span>{item.linkRotulo ?? "Acessar"}</span>
-                      <svg className="h-3.5 w-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-                      </svg>
-                    </Link>
-                  )}
+                  {item.tipo === "CONVITE_ORIENTACAO" ? (
+                    !item.resolvido ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => handleRecusarConvite(item)}
+                          disabled={isPending}
+                          className="inline-flex items-center gap-1 rounded-xl border border-zinc-300 bg-white px-3.5 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 active:scale-95 transition-all font-karla cursor-pointer disabled:opacity-50"
+                        >
+                          <span>Recusar</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleAceitarConvite(item)}
+                          disabled={isPending}
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-[#133C1B] px-4 py-1.5 text-xs font-semibold text-white shadow-2xs hover:bg-[#1a4f24] active:scale-95 transition-all font-karla cursor-pointer disabled:opacity-50"
+                        >
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                          </svg>
+                          <span>Aceitar convite</span>
+                        </button>
+                      </>
+                    ) : null
+                  ) : (
+                    <>
+                      {item.link && (
+                        <Link
+                          href={item.link}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 bg-zinc-50 px-3.5 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-100 transition-colors font-karla"
+                        >
+                          <span>{item.linkRotulo ?? "Acessar"}</span>
+                          <svg className="h-3.5 w-3.5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                          </svg>
+                        </Link>
+                      )}
 
-                  {!item.resolvido && (
-                    <button
-                      type="button"
-                      onClick={() => handleResolverItem(item)}
-                      disabled={isPending}
-                      className="inline-flex items-center gap-1 rounded-xl bg-[#133C1B] px-3.5 py-1.5 text-xs font-semibold text-white shadow-2xs hover:bg-[#1a4f24] active:scale-95 transition-all font-karla cursor-pointer disabled:opacity-50"
-                    >
-                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                      </svg>
-                      <span>Marcar como lido</span>
-                    </button>
+                      {!item.resolvido && (
+                        <button
+                          type="button"
+                          onClick={() => handleResolverItem(item)}
+                          disabled={isPending}
+                          className="inline-flex items-center gap-1 rounded-xl bg-[#133C1B] px-3.5 py-1.5 text-xs font-semibold text-white shadow-2xs hover:bg-[#1a4f24] active:scale-95 transition-all font-karla cursor-pointer disabled:opacity-50"
+                        >
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                          </svg>
+                          <span>Marcar como lido</span>
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               </div>

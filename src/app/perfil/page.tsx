@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { alunoTemOrientador } from "@/lib/guards";
 import { TopbarHeader } from "@/components/topbar-header";
 import { SignOutButton } from "@/components/sign-out-button";
 import { formatarData } from "@/lib/datas";
@@ -125,7 +126,9 @@ export default async function PerfilPage() {
                   Nível Acadêmico
                 </span>
                 <p className="font-semibold text-zinc-800">
-                  {alunoData?.nivel || "TCC"}
+                  {alunoTemOrientador(alunoData?.orientador?.email)
+                    ? alunoData?.nivel || "TCC"
+                    : "Não definido"}
                 </p>
               </div>
 
@@ -134,13 +137,16 @@ export default async function PerfilPage() {
                   Orientador Responsável
                 </span>
                 <p className="font-semibold text-zinc-800">
-                  {alunoData?.orientador?.nome || "Orientador do Programa"}
+                  {alunoTemOrientador(alunoData?.orientador?.email)
+                    ? alunoData?.orientador?.nome || "Orientador do Programa"
+                    : "Nenhum orientador vinculado"}
                 </p>
-                {alunoData?.orientador?.email && (
-                  <p className="text-xs text-zinc-500 truncate">
-                    {alunoData.orientador.email}
-                  </p>
-                )}
+                {alunoTemOrientador(alunoData?.orientador?.email) &&
+                  alunoData?.orientador?.email && (
+                    <p className="text-xs text-zinc-500 truncate">
+                      {alunoData.orientador.email}
+                    </p>
+                  )}
               </div>
 
               <div className="rounded-xl bg-zinc-50/80 border border-zinc-100 p-4 space-y-1 sm:col-span-2">

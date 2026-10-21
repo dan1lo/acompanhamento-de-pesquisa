@@ -4,6 +4,7 @@ import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { obterOuCriarSemOrientadorId } from "@/lib/guards";
 
 const CadastroSchema = z
   .object({
@@ -76,7 +77,7 @@ export async function definirTipoConta(formData: FormData) {
     },
   });
 
-  // Se o tipo escolhido for ALUNO, assegura que exista um registro Aluno criado e associado
+  // Se o tipo escolhido for ALUNO, cria o registro Aluno sem orientador vinculado (aguardando convite)
   if (dados.tipo === "ALUNO") {
     const alunoExistente = await prisma.aluno.findUnique({
       where: { email: usuario.email },
@@ -88,22 +89,18 @@ export async function definirTipoConta(formData: FormData) {
         data: { usuarioId: usuario.id },
       });
     } else {
-      const professor = await prisma.usuario.findFirst({
-        where: { papel: "PROFESSOR" },
-      });
+      const semOrientadorId = await obterOuCriarSemOrientadorId();
 
-      if (professor) {
-        await prisma.aluno.create({
-          data: {
-            nome: usuario.nome,
-            email: usuario.email,
-            nivel: "TCC",
-            dataInicio: new Date(),
-            orientadorId: professor.id,
-            usuarioId: usuario.id,
-          },
-        });
-      }
+      await prisma.aluno.create({
+        data: {
+          nome: usuario.nome,
+          email: usuario.email,
+          nivel: "TCC",
+          dataInicio: new Date(),
+          orientadorId: semOrientadorId,
+          usuarioId: usuario.id,
+        },
+      });
     }
   }
 

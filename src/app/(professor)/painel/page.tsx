@@ -5,7 +5,13 @@ import { PainelContent } from "./painel-content";
 export default async function PainelPage({
   searchParams,
 }: {
-  searchParams: Promise<{ status?: string; nivel?: string; ordenar?: string; arquivados?: string }>;
+  searchParams: Promise<{
+    status?: string;
+    nivel?: string;
+    ordenar?: string;
+    arquivados?: string;
+    adicionar?: string;
+  }>;
 }) {
   const professor = await requireProfessor();
   const params = await searchParams;
@@ -24,6 +30,7 @@ export default async function PainelPage({
     <PainelContent
       alunos={alunos}
       filtrosIniciais={filtrosIniciais}
+      abrirModalAdicionarInicial={params.adicionar === "1"}
     />
   );
 }
