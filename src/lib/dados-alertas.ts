@@ -12,6 +12,93 @@ export interface NotificacaoItem {
   resolvido: boolean;
   link?: string;
   linkRotulo?: string;
+  conviteReuniaoId?: string;
+}
+
+export interface ConviteReuniaoRow {
+  id: string;
+  remetenteId: string;
+  remetenteNome: string;
+  remetentePapel: string;
+  destinatarioUsuarioId: string | null;
+  alunoId: string;
+  alunoNome: string;
+  alunoEmail: string;
+  orientadorId: string;
+  orientadorNome: string;
+  orientadorEmail: string;
+  data: Date;
+  dataStr: string;
+  horarioStr: string;
+  pauta: string | null;
+  incluirMeet: boolean;
+  meetLink: string | null;
+  sincronizarGoogle: boolean;
+  status: string;
+  justificativaRecusa: string | null;
+  reuniaoId: string | null;
+  lidaPeloDestinatario: boolean;
+  lidaPeloRemetente: boolean;
+  atualizadoEm: Date;
+  criadoEm: Date;
+}
+
+let tabelaConviteReuniaoGarantida = false;
+
+export async function garantirTabelaConviteReuniao() {
+  if (tabelaConviteReuniaoGarantida) return;
+  try {
+    const check = await prisma.$queryRawUnsafe<Array<{ exists: boolean }>>(`
+      SELECT EXISTS (
+        SELECT 1 FROM information_schema.tables 
+        WHERE table_schema = 'public' AND table_name = 'convite_reuniao'
+      ) AS "exists";
+    `);
+    if (check && check[0]?.exists) {
+      tabelaConviteReuniaoGarantida = true;
+      return;
+    }
+
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS convite_reuniao (
+        id TEXT PRIMARY KEY,
+        "remetenteId" TEXT NOT NULL,
+        "remetenteNome" TEXT NOT NULL,
+        "remetentePapel" TEXT NOT NULL,
+        "destinatarioUsuarioId" TEXT,
+        "alunoId" TEXT NOT NULL,
+        "alunoNome" TEXT NOT NULL,
+        "alunoEmail" TEXT NOT NULL,
+        "orientadorId" TEXT NOT NULL,
+        "orientadorNome" TEXT NOT NULL,
+        "orientadorEmail" TEXT NOT NULL,
+        "data" TIMESTAMP NOT NULL,
+        "dataStr" TEXT NOT NULL,
+        "horarioStr" TEXT NOT NULL,
+        "pauta" TEXT,
+        "incluirMeet" BOOLEAN DEFAULT false,
+        "meetLink" TEXT,
+        "sincronizarGoogle" BOOLEAN DEFAULT true,
+        "status" TEXT NOT NULL DEFAULT 'PENDENTE',
+        "justificativaRecusa" TEXT,
+        "reuniaoId" TEXT,
+        "lidaPeloDestinatario" BOOLEAN DEFAULT false,
+        "lidaPeloRemetente" BOOLEAN DEFAULT true,
+        "atualizadoEm" TIMESTAMP DEFAULT NOW(),
+        "criadoEm" TIMESTAMP DEFAULT NOW()
+      );
+    `);
+    tabelaConviteReuniaoGarantida = true;
+  } catch (err: any) {
+    if (
+      err?.code === "23505" ||
+      err?.code === "42P07" ||
+      String(err?.message || "").includes("já existe")
+    ) {
+      tabelaConviteReuniaoGarantida = true;
+      return;
+    }
+  }
 }
 
 const alunosSendoVerificados = new Set<string>();
@@ -20,10 +107,8 @@ const alunosSendoVerificados = new Set<string>();
  * Converte mensagens de alerta com metadados para a visão do Orientador.
  */
 export function formatarMensagemAlertaParaProfessor(mensagem: string): string {
-  if (mensagem.includes("|||")) {
-    return mensagem.split("|||")[0].trim();
-  }
-  return mensagem;
+  const base = mensagem.includes("|||") ? mensagem.split("|||")[0].trim() : mensagem;
+  return base.replace(/\s*\(com sala no Google Meet\)/gi, "");
 }
 
 /**
@@ -34,7 +119,7 @@ export function formatarMensagemAlertaParaAluno(
   nomeAluno?: string,
   tipo?: string
 ): string {
-  const msg = mensagem.trim();
+  const msg = mensagem.trim().replace(/\s*\(com sala no Google Meet\)/gi, "");
 
   // Alertas de Produção Acadêmica codificados com título
   if (msg.includes("|||")) {
@@ -268,6 +353,8 @@ export async function garantirAlertasAluno(alunoId: string, alunoNome: string) {
  */
 export async function verificarEObterAlertasProfessor(professorId: string): Promise<NotificacaoItem[]> {
   try {
+    await garantirTabelaConviteReuniao();
+
     const alunos = await prisma.aluno.findMany({
       where: { orientadorId: professorId, arquivado: false },
       select: { id: true, nome: true },
@@ -275,6 +362,65 @@ export async function verificarEObterAlertasProfessor(professorId: string): Prom
 
     for (const aluno of alunos) {
       await garantirAlertasAluno(aluno.id, aluno.nome);
+    }
+
+    // 1. Convites de reunião recebidos pelo orientador (enviados por alunos) ou respostas aos convites que o orientador enviou
+    let convitesReuniaoRows: ConviteReuniaoRow[] = [];
+    try {
+      convitesReuniaoRows = await prisma.$queryRawUnsafe<ConviteReuniaoRow[]>(
+        `SELECT * FROM convite_reuniao WHERE "orientadorId" = $1 ORDER BY "atualizadoEm" DESC, "criadoEm" DESC`,
+        professorId
+      );
+    } catch {}
+
+    const itensConviteProfessor: NotificacaoItem[] = [];
+    for (const c of convitesReuniaoRows) {
+      const dataPt = new Date(c.data).toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      });
+
+      // Se o aluno enviou o convite para o orientador e está PENDENTE
+      if (c.remetentePapel === "ALUNO" && c.status === "PENDENTE" && !c.lidaPeloDestinatario) {
+        itensConviteProfessor.push({
+          id: c.id,
+          conviteReuniaoId: c.id,
+          tipo: "CONVITE_REUNIAO",
+          mensagem: `${c.alunoNome} enviou um convite de reunião para ${dataPt} às ${c.horarioStr}.`,
+          alunoId: c.alunoId,
+          alunoNome: c.alunoNome,
+          criadoEm: new Date(c.criadoEm).toISOString(),
+          resolvido: false,
+          link: "/reunioes",
+          linkRotulo: "Ir para Reuniões",
+        });
+      }
+
+      // Se o orientador enviou o convite e o aluno aceitou ou recusou (e o orientador ainda não leu a resposta)
+      if (
+        c.remetentePapel !== "ALUNO" &&
+        (c.status === "ACEITO" || c.status === "RECUSADO") &&
+        !c.lidaPeloRemetente
+      ) {
+        const msgResposta =
+          c.status === "ACEITO"
+            ? `${c.alunoNome} aceitou o convite de reunião para ${dataPt} às ${c.horarioStr}.`
+            : `${c.alunoNome} recusou o convite de reunião para ${dataPt} às ${c.horarioStr}. Justificativa: "${c.justificativaRecusa || "Não informada"}"`;
+
+        itensConviteProfessor.push({
+          id: `resp_${c.id}`,
+          conviteReuniaoId: c.id,
+          tipo: "RESPOSTA_CONVITE_REUNIAO",
+          mensagem: msgResposta,
+          alunoId: c.alunoId,
+          alunoNome: c.alunoNome,
+          criadoEm: new Date(c.atualizadoEm || c.criadoEm).toISOString(),
+          resolvido: false,
+          link: "/reunioes",
+          linkRotulo: "Ver em Reuniões",
+        });
+      }
     }
 
     const alertas = await prisma.alerta.findMany({
@@ -290,6 +436,7 @@ export async function verificarEObterAlertasProfessor(professorId: string): Prom
 
     const alertasUnicosMap = new Map<string, typeof alertas[0]>();
     for (const a of alertas) {
+      if (a.mensagem.includes("marcou uma reunião para")) continue;
       const msgFormatada = formatarMensagemAlertaParaProfessor(a.mensagem);
       const chave = `${a.alunoId}-${a.tipo}-${msgFormatada}`;
       if (!alertasUnicosMap.has(chave)) {
@@ -299,9 +446,9 @@ export async function verificarEObterAlertasProfessor(professorId: string): Prom
 
     const alertasUnicos = Array.from(alertasUnicosMap.values()).slice(0, 10);
 
-    return alertasUnicos.map((a) => {
-      let link = `/alunos/${a.alunoId}`;
-      let linkRotulo = "Acompanhar orientando";
+    const itensAlerta = alertasUnicos.map((a) => {
+      const link = `/alunos/${a.alunoId}`;
+      const linkRotulo = "Acompanhar orientando";
 
       return {
         id: a.id,
@@ -315,6 +462,10 @@ export async function verificarEObterAlertasProfessor(professorId: string): Prom
         linkRotulo,
       };
     });
+
+    return [...itensConviteProfessor, ...itensAlerta].sort(
+      (a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime()
+    );
   } catch (error) {
     console.error("Erro ao verificar/obter alertas do professor:", error);
     return [];
@@ -326,6 +477,8 @@ export async function verificarEObterAlertasProfessor(professorId: string): Prom
  */
 export async function obterNotificacoesAluno(alunoId: string): Promise<NotificacaoItem[]> {
   try {
+    await garantirTabelaConviteReuniao();
+
     const aluno = await prisma.aluno.findUnique({
       where: { id: alunoId },
       select: { id: true, nome: true, arquivado: true },
@@ -335,7 +488,66 @@ export async function obterNotificacoesAluno(alunoId: string): Promise<Notificac
       await garantirAlertasAluno(aluno.id, aluno.nome);
     }
 
-    // Notificações de comentários em artigo
+    // 1. Convites de reunião recebidos pelo aluno (enviados pelo orientador) ou respostas aos convites que o aluno enviou
+    let convitesReuniaoRows: ConviteReuniaoRow[] = [];
+    try {
+      convitesReuniaoRows = await prisma.$queryRawUnsafe<ConviteReuniaoRow[]>(
+        `SELECT * FROM convite_reuniao WHERE "alunoId" = $1 ORDER BY "atualizadoEm" DESC, "criadoEm" DESC`,
+        alunoId
+      );
+    } catch {}
+
+    const itensConviteAluno: NotificacaoItem[] = [];
+    for (const c of convitesReuniaoRows) {
+      const dataPt = new Date(c.data).toLocaleDateString("pt-BR", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      });
+
+      // Se o orientador enviou o convite para o aluno e está PENDENTE
+      if (c.remetentePapel !== "ALUNO" && c.status === "PENDENTE" && !c.lidaPeloDestinatario) {
+        itensConviteAluno.push({
+          id: c.id,
+          conviteReuniaoId: c.id,
+          tipo: "CONVITE_REUNIAO",
+          mensagem: `${c.orientadorNome} enviou um convite de reunião para ${dataPt} às ${c.horarioStr}.`,
+          alunoId: c.alunoId,
+          alunoNome: c.alunoNome,
+          criadoEm: new Date(c.criadoEm).toISOString(),
+          resolvido: false,
+          link: "/reunioes",
+          linkRotulo: "Ir para Reuniões",
+        });
+      }
+
+      // Se o aluno enviou o convite e o orientador aceitou ou recusou
+      if (
+        c.remetentePapel === "ALUNO" &&
+        (c.status === "ACEITO" || c.status === "RECUSADO") &&
+        !c.lidaPeloRemetente
+      ) {
+        const msgResposta =
+          c.status === "ACEITO"
+            ? `${c.orientadorNome} aceitou o convite de reunião para ${dataPt} às ${c.horarioStr}.`
+            : `${c.orientadorNome} recusou o convite de reunião para ${dataPt} às ${c.horarioStr}. Justificativa: "${c.justificativaRecusa || "Não informada"}"`;
+
+        itensConviteAluno.push({
+          id: `resp_${c.id}`,
+          conviteReuniaoId: c.id,
+          tipo: "RESPOSTA_CONVITE_REUNIAO",
+          mensagem: msgResposta,
+          alunoId: c.alunoId,
+          alunoNome: c.alunoNome,
+          criadoEm: new Date(c.atualizadoEm || c.criadoEm).toISOString(),
+          resolvido: false,
+          link: "/reunioes",
+          linkRotulo: "Ver em Reuniões",
+        });
+      }
+    }
+
+    // 2. Notificações de comentários em artigo / convite de orientação
     let rows: Array<{
       id: string;
       alunoId: string;
@@ -354,7 +566,7 @@ export async function obterNotificacoesAluno(alunoId: string): Promise<Notificac
       // Silencioso se a tabela ainda não existir
     }
 
-    // Alertas ativos da tabela 'alerta'
+    // 3. Alertas ativos da tabela 'alerta'
     const alertasAtivos = await prisma.alerta.findMany({
       where: {
         alunoId,
@@ -365,6 +577,7 @@ export async function obterNotificacoesAluno(alunoId: string): Promise<Notificac
 
     const alertasUnicosMap = new Map<string, typeof alertasAtivos[0]>();
     for (const a of alertasAtivos) {
+      if (a.mensagem.includes("marcou uma reunião para")) continue;
       const msgFormatada = formatarMensagemAlertaParaAluno(a.mensagem, aluno?.nome, a.tipo);
       const chave = `${a.alunoId}-${a.tipo}-${msgFormatada}`;
       if (!alertasUnicosMap.has(chave)) {
@@ -373,34 +586,36 @@ export async function obterNotificacoesAluno(alunoId: string): Promise<Notificac
     }
     const alertasAtivosUnicos = Array.from(alertasUnicosMap.values()).slice(0, 10);
 
-    const itensNotificacao: NotificacaoItem[] = rows.map((r) => {
-      if (r.mensagem.includes("||| CONVITE_ORIENTACAO |||")) {
-        const parts = r.mensagem.split("|||").map((s) => s.trim());
+    const itensNotificacao: NotificacaoItem[] = rows
+      .filter((r) => !r.mensagem.includes("marcou uma reunião com você para"))
+      .map((r) => {
+        if (r.mensagem.includes("||| CONVITE_ORIENTACAO |||")) {
+          const parts = r.mensagem.split("|||").map((s) => s.trim());
+          return {
+            id: r.id,
+            tipo: "CONVITE_ORIENTACAO",
+            mensagem: parts[0],
+            alunoId: r.alunoId,
+            alunoNome: aluno?.nome ?? "",
+            criadoEm: new Date(r.criadoEm).toISOString(),
+            resolvido: r.lida,
+            link: "/alertas",
+            linkRotulo: "Ver convite",
+          };
+        }
+
         return {
           id: r.id,
-          tipo: "CONVITE_ORIENTACAO",
-          mensagem: parts[0],
+          tipo: "NOVA_MARCACAO",
+          mensagem: r.mensagem,
           alunoId: r.alunoId,
           alunoNome: aluno?.nome ?? "",
           criadoEm: new Date(r.criadoEm).toISOString(),
           resolvido: r.lida,
-          link: "/alertas",
-          linkRotulo: "Ver convite",
+          link: r.producaoId ? `/producao/${r.producaoId}` : "/producao",
+          linkRotulo: "Ver artigo",
         };
-      }
-
-      return {
-        id: r.id,
-        tipo: "NOVA_MARCACAO",
-        mensagem: r.mensagem,
-        alunoId: r.alunoId,
-        alunoNome: aluno?.nome ?? "",
-        criadoEm: new Date(r.criadoEm).toISOString(),
-        resolvido: r.lida,
-        link: r.producaoId ? `/producao/${r.producaoId}` : "/producao",
-        linkRotulo: "Ver artigo",
-      };
-    });
+      });
 
     const itensAlerta: NotificacaoItem[] = alertasAtivosUnicos.map((a) => {
       let link = "/alertas";
@@ -412,7 +627,7 @@ export async function obterNotificacoesAluno(alunoId: string): Promise<Notificac
         link = producaoId ? `/producao/${producaoId}` : "/producao";
         linkRotulo = "Ver produção";
       } else if (a.tipo === "DIAS_SEM_REUNIAO") {
-        link = "/agendar";
+        link = "/reunioes";
         linkRotulo = "Agendar reunião";
       } else if (a.tipo === "TAREFA_ATRASADA" || a.tipo === "PRAZO_PROXIMO") {
         link = "/entregas";
@@ -435,7 +650,7 @@ export async function obterNotificacoesAluno(alunoId: string): Promise<Notificac
       };
     });
 
-    return [...itensNotificacao, ...itensAlerta].sort(
+    return [...itensConviteAluno, ...itensNotificacao, ...itensAlerta].sort(
       (a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime()
     );
   } catch (err) {

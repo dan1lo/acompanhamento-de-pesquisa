@@ -4,7 +4,12 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { requireProfessor, requireAluno } from "@/lib/guards";
 import { gerarAlertas } from "@/lib/jobs/alertas";
-import { verificarEObterAlertasProfessor, obterNotificacoesAluno, type NotificacaoItem } from "@/lib/dados-alertas";
+import {
+  verificarEObterAlertasProfessor,
+  obterNotificacoesAluno,
+  garantirTabelaConviteReuniao,
+  type NotificacaoItem,
+} from "@/lib/dados-alertas";
 
 export async function gerarAlertasAgora() {
   await requireProfessor();
@@ -14,6 +19,20 @@ export async function gerarAlertasAgora() {
 
 export async function resolverAlerta(alertaId: string) {
   const professor = await requireProfessor();
+
+  if (alertaId.startsWith("resp_")) {
+    await garantirTabelaConviteReuniao();
+    const conviteId = alertaId.replace(/^resp_/, "");
+    await prisma.$executeRawUnsafe(
+      `UPDATE convite_reuniao SET "lidaPeloRemetente" = true WHERE id = $1 AND "orientadorId" = $2`,
+      conviteId,
+      professor.id
+    );
+    revalidatePath("/alertas");
+    revalidatePath("/painel");
+    revalidatePath("/reunioes");
+    return;
+  }
 
   const alerta = await prisma.alerta.findUnique({ where: { id: alertaId }, include: { aluno: true } });
   if (!alerta || (alerta.aluno.orientadorId !== professor.id && alerta.alunoId !== professor.id)) throw new Error("Alerta não encontrado");
@@ -69,6 +88,21 @@ export async function finalizarSessaoMarcacoes(producaoId: string, totalNovas: n
 
 export async function marcarNotificacaoAlunoComoLida(notificacaoId: string) {
   const { aluno } = await requireAluno();
+
+  if (notificacaoId.startsWith("resp_")) {
+    await garantirTabelaConviteReuniao();
+    const conviteId = notificacaoId.replace(/^resp_/, "");
+    await prisma.$executeRawUnsafe(
+      `UPDATE convite_reuniao SET "lidaPeloRemetente" = true WHERE id = $1 AND "alunoId" = $2`,
+      conviteId,
+      aluno.id
+    );
+    revalidatePath("/inicio");
+    revalidatePath("/alertas");
+    revalidatePath("/reunioes");
+    return;
+  }
+
   await prisma.$executeRawUnsafe(
     `UPDATE notificacao_aluno SET lida = true WHERE id = $1 AND "alunoId" = $2`,
     notificacaoId,
@@ -93,6 +127,20 @@ export async function marcarNotificacoesProducaoLidas(producaoId: string) {
 
 export async function resolverAlertaAluno(alertaId: string) {
   const { aluno } = await requireAluno();
+
+  if (alertaId.startsWith("resp_")) {
+    await garantirTabelaConviteReuniao();
+    const conviteId = alertaId.replace(/^resp_/, "");
+    await prisma.$executeRawUnsafe(
+      `UPDATE convite_reuniao SET "lidaPeloRemetente" = true WHERE id = $1 AND "alunoId" = $2`,
+      conviteId,
+      aluno.id
+    );
+    revalidatePath("/alertas");
+    revalidatePath("/inicio");
+    revalidatePath("/reunioes");
+    return;
+  }
 
   const alerta = await prisma.alerta.findUnique({ where: { id: alertaId } });
   if (!alerta || alerta.alunoId !== aluno.id) throw new Error("Alerta não encontrado");
@@ -124,6 +172,14 @@ export async function resolverTodosAlertasAluno() {
     // Silencioso se tabela vazia
   }
 
+  try {
+    await garantirTabelaConviteReuniao();
+    await prisma.$executeRawUnsafe(
+      `UPDATE convite_reuniao SET "lidaPeloRemetente" = true WHERE "alunoId" = $1 AND "remetentePapel" = 'ALUNO' AND "lidaPeloRemetente" = false`,
+      aluno.id
+    );
+  } catch {}
+
   revalidatePath("/alertas");
   revalidatePath("/inicio");
   revalidatePath("/producao");
@@ -143,6 +199,14 @@ export async function resolverTodosAlertasProfessor() {
     where: { aluno: { orientadorId: professor.id }, resolvido: false },
     data: { resolvido: true },
   });
+
+  try {
+    await garantirTabelaConviteReuniao();
+    await prisma.$executeRawUnsafe(
+      `UPDATE convite_reuniao SET "lidaPeloRemetente" = true WHERE "orientadorId" = $1 AND "remetentePapel" != 'ALUNO' AND "lidaPeloRemetente" = false`,
+      professor.id
+    );
+  } catch {}
 
   revalidatePath("/alertas");
   revalidatePath("/painel");

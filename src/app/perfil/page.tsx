@@ -233,10 +233,10 @@ export default async function PerfilPage() {
                     </span>
                   )}
                   <Link
-                    href="/configuracoes/google"
+                    href="/reunioes?modal=google"
                     className="text-xs font-semibold text-[#133C1B] hover:underline"
                   >
-                    Gerenciar conexão →
+                    Gerenciar em Reuniões →
                   </Link>
                 </div>
               </div>

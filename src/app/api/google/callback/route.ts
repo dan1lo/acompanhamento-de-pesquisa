@@ -4,7 +4,7 @@ import { salvarConexaoGoogle, trocarCodigoPorTokens } from "@/lib/google-calenda
 
 export async function GET(request: NextRequest) {
   const session = await auth();
-  if (!session?.user || session.user.papel !== "PROFESSOR") {
+  if (!session?.user) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
 
@@ -12,15 +12,15 @@ export async function GET(request: NextRequest) {
   const state = request.nextUrl.searchParams.get("state");
 
   if (!code || !state || state !== session.user.id) {
-    return NextResponse.redirect(new URL("/configuracoes/google?erro=1", request.url));
+    return NextResponse.redirect(new URL("/reunioes?google=erro", request.url));
   }
 
   try {
     const tokens = await trocarCodigoPorTokens(code);
     await salvarConexaoGoogle(session.user.id, tokens);
-    return NextResponse.redirect(new URL("/configuracoes/google?conectado=1", request.url));
+    return NextResponse.redirect(new URL("/reunioes?google=conectado", request.url));
   } catch (erro) {
     console.error("Erro ao conectar Google Calendar", erro);
-    return NextResponse.redirect(new URL("/configuracoes/google?erro=1", request.url));
+    return NextResponse.redirect(new URL("/reunioes?google=erro", request.url));
   }
 }

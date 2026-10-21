@@ -14,9 +14,14 @@ import {
   aceitarConviteOrientacao,
   recusarConviteOrientacao,
 } from "@/lib/actions/convites";
+import {
+  aceitarConviteReuniao,
+  recusarConviteReuniao,
+} from "@/lib/actions/calendario";
 
 export interface AlertaAlunoItem {
   id: string;
+  conviteReuniaoId?: string;
   origem: "ALERTA" | "NOTIFICACAO";
   tipo: string;
   tipoRotulo: string;
@@ -70,6 +75,16 @@ const ESTILOS_TIPO: Record<
     badgeClass: "bg-emerald-100 text-[#133C1B] border-emerald-300",
     dotClass: "bg-[#138A07]",
   },
+  CONVITE_REUNIAO: {
+    borderClass: "border-l-[#133C1B]",
+    badgeClass: "bg-emerald-100 text-[#133C1B] border-emerald-300",
+    dotClass: "bg-[#138A07]",
+  },
+  RESPOSTA_CONVITE_REUNIAO: {
+    borderClass: "border-l-blue-500",
+    badgeClass: "bg-blue-50 text-blue-900 border-blue-200",
+    dotClass: "bg-blue-500",
+  },
 };
 
 function SleepyFaceIcon({ className = "h-24 w-24" }: { className?: string }) {
@@ -106,6 +121,12 @@ export function AlertasAlunoContent({
   const [filtro, setFiltro] = useState<"TODOS" | "PENDENTES" | "RESOLVIDOS">("PENDENTES");
   const [isPending, startTransition] = useTransition();
   const [mensagemSucesso, setMensagemSucesso] = useState<string | null>(null);
+
+  // Modal de recusa de convite de reunião
+  const [itemParaRecusar, setItemParaRecusar] = useState<AlertaAlunoItem | null>(null);
+  const [justificativaRecusa, setJustificativaRecusa] = useState("");
+  const [erroRecusa, setErroRecusa] = useState("");
+  const [enviandoRecusa, setEnviandoRecusa] = useState(false);
 
   useEffect(() => {
     setItens(itensIniciais);
@@ -178,9 +199,37 @@ export function AlertasAlunoContent({
     });
   }
 
+  function handleAceitarConviteReuniao(item: AlertaAlunoItem) {
+    setItens((prev) =>
+      prev.map((i) =>
+        i.id === item.id
+          ? { ...i, resolvido: true, mensagem: `${i.mensagem} (Convite aceito)` }
+          : i
+      )
+    );
+    startTransition(async () => {
+      try {
+        const res = await aceitarConviteReuniao(item.conviteReuniaoId ?? item.id);
+        if (res.ok) {
+          setMensagemSucesso("Convite de reunião aceito! A reunião foi agendada no calendário.");
+          setTimeout(() => setMensagemSucesso(null), 4000);
+          router.refresh();
+        } else {
+          setItens(itensIniciais);
+        }
+      } catch {
+        setItens(itensIniciais);
+      }
+    });
+  }
+
   function handleResolverTodos() {
     setItens((prev) =>
-      prev.map((i) => (i.tipo === "CONVITE_ORIENTACAO" ? i : { ...i, resolvido: true }))
+      prev.map((i) =>
+        i.tipo === "CONVITE_ORIENTACAO" || i.tipo === "CONVITE_REUNIAO"
+          ? i
+          : { ...i, resolvido: true }
+      )
     );
     setMensagemSucesso("Todos os alertas foram marcados como lidos!");
     setTimeout(() => setMensagemSucesso(null), 3500);
@@ -210,7 +259,7 @@ export function AlertasAlunoContent({
       {/* Descrição da página alinhada à esquerda abaixo da topbar */}
       <div className="mb-6 sm:mb-8 text-left w-full">
         <p className="text-sm sm:text-base text-zinc-600 font-spectral leading-relaxed text-left">
-          Acompanhe suas tarefas pendentes, prazos próximos, reuniões agendadas e novas marcações feitas pelo seu orientador.
+          Acompanhe suas tarefas pendentes, prazos próximos, convites de reunião e novas marcações feitas pelo seu orientador.
         </p>
       </div>
 
@@ -379,6 +428,34 @@ export function AlertasAlunoContent({
                         </button>
                       </>
                     ) : null
+                  ) : item.tipo === "CONVITE_REUNIAO" ? (
+                    !item.resolvido ? (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setItemParaRecusar(item);
+                            setJustificativaRecusa("");
+                            setErroRecusa("");
+                          }}
+                          disabled={isPending}
+                          className="inline-flex items-center gap-1 rounded-xl border border-red-200 bg-red-50 px-3.5 py-1.5 text-xs font-semibold text-red-700 hover:bg-red-100 active:scale-95 transition-all font-karla cursor-pointer disabled:opacity-50"
+                        >
+                          <span>Recusar</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleAceitarConviteReuniao(item)}
+                          disabled={isPending}
+                          className="inline-flex items-center gap-1.5 rounded-xl bg-[#133C1B] px-4 py-1.5 text-xs font-semibold text-white shadow-2xs hover:bg-[#1a4f24] active:scale-95 transition-all font-karla cursor-pointer disabled:opacity-50"
+                        >
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                          </svg>
+                          <span>Aceitar convite</span>
+                        </button>
+                      </>
+                    ) : null
                   ) : (
                     <>
                       {item.link && (
@@ -412,6 +489,110 @@ export function AlertasAlunoContent({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Modal de justificativa para recusar convite de reunião */}
+      {itemParaRecusar && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-[2px]"
+          onClick={() => setItemParaRecusar(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-extrabold text-zinc-900 font-karla">
+                  Recusar Convite de Reunião
+                </h3>
+                <p className="mt-1 text-xs text-zinc-500 font-spectral">
+                  Para recusar o convite de reunião, informe obrigatoriamente uma justificativa.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setItemParaRecusar(null)}
+                className="rounded-lg p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 cursor-pointer"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="mt-4">
+              <label className="block text-xs font-bold text-zinc-700 font-karla mb-1.5">
+                Justificativa da recusa <span className="text-red-600">*</span>
+              </label>
+              <textarea
+                rows={3}
+                value={justificativaRecusa}
+                onChange={(e) => {
+                  setJustificativaRecusa(e.target.value);
+                  if (erroRecusa) setErroRecusa("");
+                }}
+                placeholder="Ex.: Estarei em aula nesse horário, podemos remarcar para o dia seguinte?"
+                className="w-full rounded-xl border border-zinc-300 bg-zinc-50/50 px-3.5 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-[#133C1B] focus:bg-white focus:outline-none font-spectral resize-none"
+              />
+              {erroRecusa && (
+                <p className="mt-1.5 text-xs font-semibold text-red-600 font-karla">
+                  {erroRecusa}
+                </p>
+              )}
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setItemParaRecusar(null)}
+                className="rounded-xl border border-zinc-200 px-4 py-2 text-xs font-bold text-zinc-700 hover:bg-zinc-50 transition-colors font-karla cursor-pointer"
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                disabled={enviandoRecusa}
+                onClick={async () => {
+                  const just = justificativaRecusa.trim();
+                  if (!just) {
+                    setErroRecusa("É obrigatório informar uma justificativa para recusar a reunião.");
+                    return;
+                  }
+                  setEnviandoRecusa(true);
+                  try {
+                    const res = await recusarConviteReuniao(
+                      itemParaRecusar.conviteReuniaoId ?? itemParaRecusar.id,
+                      just
+                    );
+                    if (!res.ok) {
+                      setErroRecusa(res.erro || "Erro ao recusar convite.");
+                    } else {
+                      setItens((prev) =>
+                        prev.map((i) =>
+                          i.id === itemParaRecusar.id
+                            ? { ...i, resolvido: true, mensagem: `${i.mensagem} (Convite recusado)` }
+                            : i
+                        )
+                      );
+                      setItemParaRecusar(null);
+                      setMensagemSucesso("Convite de reunião recusado.");
+                      setTimeout(() => setMensagemSucesso(null), 3500);
+                      router.refresh();
+                    }
+                  } catch {
+                    setErroRecusa("Erro ao recusar convite.");
+                  } finally {
+                    setEnviandoRecusa(false);
+                  }
+                }}
+                className="rounded-xl bg-red-600 px-4 py-2 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50 transition-colors font-karla cursor-pointer"
+              >
+                {enviandoRecusa ? "Recusando..." : "Confirmar recusa"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -5,8 +5,18 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
 import type { NotificacaoItem } from "@/lib/dados-alertas";
-import { buscarNotificacoesProfessor, buscarNotificacoesAluno, marcarNotificacaoAlunoComoLida, resolverAlertaAluno } from "@/lib/actions/alertas";
+import {
+  buscarNotificacoesProfessor,
+  buscarNotificacoesAluno,
+  marcarNotificacaoAlunoComoLida,
+  resolverAlertaAluno,
+  resolverAlerta,
+} from "@/lib/actions/alertas";
 import { aceitarConviteOrientacao } from "@/lib/actions/convites";
+import {
+  aceitarConviteReuniao,
+  recusarConviteReuniao,
+} from "@/lib/actions/calendario";
 
 interface TopbarHeaderProps {
   userName?: string | null;
@@ -19,21 +29,18 @@ interface TopbarHeaderProps {
 
 const PROFESSOR_LINKS_PRINCIPAIS = [
   { href: "/painel", label: "Painel" },
-  { href: "/fila", label: "Quem contatar hoje" },
+  { href: "/reunioes", label: "Reuniões" },
   { href: "/buscar", label: "Buscar" },
-  { href: "/horarios", label: "Horários" },
 ];
 
 const PROFESSOR_LINKS_CONFIG = [
-  { href: "/configuracoes/google", label: "Google Calendar" },
   { href: "/configuracoes/alertas", label: "Config. alertas" },
   { href: "/coorientadores", label: "Coorientadores" },
 ];
 
 const ALUNO_LINKS_PRINCIPAIS = [
   { href: "/inicio", label: "Início" },
-  { href: "/agendar", label: "Agendar reunião" },
-  { href: "/reunioes", label: "Minhas reuniões" },
+  { href: "/reunioes", label: "Reuniões" },
   { href: "/entregas", label: "Entregas" },
   { href: "/producao", label: "Produção científica" },
 ];
@@ -103,12 +110,6 @@ function renderNavIcon(href: string) {
           <path strokeLinecap="round" strokeLinejoin="round" d="M4.26 10.147a60.436 60.436 0 00-.491 6.347A48.627 48.627 0 0112 20.904a48.627 48.627 0 018.232-4.41 60.46 60.46 0 00-.491-6.347m-15.482 0a50.57 50.57 0 00-2.658-.813A59.905 59.905 0 0112 3.493a59.902 59.902 0 0110.399 5.84c-.896.248-1.783.52-2.658.814m-15.482 0A50.697 50.697 0 0112 13.489a50.702 50.702 0 017.74-3.342M6.75 15a.75.75 0 100-1.5.75.75 0 000 1.5zm0 0v-3.675A55.378 55.378 0 0112 8.443m-7.007 11.55A5.981 5.981 0 006.75 15.75v-1.5" />
         </svg>
       );
-    case "/configuracoes/google":
-      return (
-        <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5" />
-        </svg>
-      );
     case "/configuracoes/alertas":
       return (
         <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
@@ -147,6 +148,10 @@ export function TopbarHeader({
 }: TopbarHeaderProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [notificacoesState, setNotificacoesState] = useState<NotificacaoItem[]>(() => notificacoes ?? []);
+  const [conviteParaRecusar, setConviteParaRecusar] = useState<{ id: string; notifId: string } | null>(null);
+  const [justificativaRecusaInput, setJustificativaRecusaInput] = useState("");
+  const [erroRecusa, setErroRecusa] = useState<string | null>(null);
+  const [enviandoRecusa, setEnviandoRecusa] = useState(false);
   const pathname = usePathname();
   const router = useRouter();
 
@@ -340,8 +345,40 @@ export function TopbarHeader({
                               <p className="text-xs font-semibold text-zinc-900 font-karla leading-snug">
                                 {notif.mensagem}
                               </p>
-                              <div className="flex items-center justify-between mt-1 text-[11px] text-zinc-500 font-spectral">
-                                {isAluno ? (
+                              <div className="flex items-center justify-between mt-1.5 text-[11px] text-zinc-500 font-spectral gap-2 flex-wrap">
+                                {notif.tipo === "CONVITE_REUNIAO" ? (
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        try {
+                                          await aceitarConviteReuniao(notif.conviteReuniaoId ?? notif.id);
+                                          setNotificacoesState((prev) =>
+                                            prev.filter((n) => n.id !== notif.id)
+                                          );
+                                          router.refresh();
+                                        } catch {}
+                                      }}
+                                      className="rounded-lg bg-[#133C1B] px-2.5 py-0.5 text-[11px] font-semibold text-white hover:bg-[#1a4f24] transition-colors font-karla cursor-pointer"
+                                    >
+                                      Aceitar
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setConviteParaRecusar({
+                                          id: notif.conviteReuniaoId ?? notif.id,
+                                          notifId: notif.id,
+                                        });
+                                        setJustificativaRecusaInput("");
+                                        setErroRecusa("");
+                                      }}
+                                      className="rounded-lg border border-red-200 bg-red-50 px-2.5 py-0.5 text-[11px] font-semibold text-red-700 hover:bg-red-100 transition-colors font-karla cursor-pointer"
+                                    >
+                                      Recusar
+                                    </button>
+                                  </div>
+                                ) : isAluno ? (
                                   notif.tipo === "CONVITE_ORIENTACAO" ? (
                                     <div className="flex items-center gap-2">
                                       <button
@@ -374,6 +411,8 @@ export function TopbarHeader({
                                           try {
                                             if (notif.tipo === "NOVA_MARCACAO") {
                                               await marcarNotificacaoAlunoComoLida(notif.id);
+                                            } else if (notif.tipo === "RESPOSTA_CONVITE_REUNIAO") {
+                                              await resolverAlertaAluno(notif.id);
                                             }
                                             setNotificacoesState((prev) => prev.filter((n) => n.id !== notif.id));
                                           } catch {}
@@ -407,6 +446,34 @@ export function TopbarHeader({
                                       </button>
                                     </div>
                                   )
+                                ) : notif.tipo === "RESPOSTA_CONVITE_REUNIAO" ? (
+                                  <div className="flex items-center gap-2">
+                                    <Link
+                                      href="/reunioes"
+                                      onClick={async () => {
+                                        try {
+                                          await resolverAlerta(notif.id);
+                                          setNotificacoesState((prev) => prev.filter((n) => n.id !== notif.id));
+                                        } catch {}
+                                      }}
+                                      className="text-[#133C1B] font-medium hover:underline font-karla"
+                                    >
+                                      Ver reuniões →
+                                    </Link>
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        try {
+                                          await resolverAlerta(notif.id);
+                                          setNotificacoesState((prev) => prev.filter((n) => n.id !== notif.id));
+                                        } catch {}
+                                      }}
+                                      className="text-[10px] text-zinc-400 hover:text-zinc-600 font-karla cursor-pointer"
+                                      title="Marcar como lida"
+                                    >
+                                      ✓ Lida
+                                    </button>
+                                  </div>
                                 ) : notif.alunoId ? (
                                   <Link
                                     href={`/alunos/${notif.alunoId}`}
@@ -654,6 +721,101 @@ export function TopbarHeader({
           </div>
         </nav>
       </aside>
+
+      {/* Modal de justificativa para recusar convite de reunião */}
+      {conviteParaRecusar && (
+        <div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 backdrop-blur-[2px]"
+          onClick={() => setConviteParaRecusar(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h3 className="text-lg font-extrabold text-zinc-900 font-karla">
+                  Recusar Convite de Reunião
+                </h3>
+                <p className="mt-1 text-xs text-zinc-500 font-spectral">
+                  Para recusar o convite de reunião, informe obrigatoriamente uma justificativa.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setConviteParaRecusar(null)}
+                className="rounded-lg p-1 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 cursor-pointer"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="mt-4">
+              <label className="block text-xs font-bold text-zinc-700 font-karla mb-1.5">
+                Justificativa da recusa <span className="text-red-600">*</span>
+              </label>
+              <textarea
+                rows={3}
+                value={justificativaRecusaInput}
+                onChange={(e) => {
+                  setJustificativaRecusaInput(e.target.value);
+                  if (erroRecusa) setErroRecusa("");
+                }}
+                placeholder="Ex.: Estarei em aula nesse horário, podemos remarcar para o dia seguinte?"
+                className="w-full rounded-xl border border-zinc-300 bg-zinc-50/50 px-3.5 py-2.5 text-sm text-zinc-900 placeholder:text-zinc-400 focus:border-[#133C1B] focus:bg-white focus:outline-none font-spectral resize-none"
+              />
+              {erroRecusa && (
+                <p className="mt-1.5 text-xs font-semibold text-red-600 font-karla">
+                  {erroRecusa}
+                </p>
+              )}
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setConviteParaRecusar(null)}
+                className="rounded-xl border border-zinc-200 px-4 py-2 text-xs font-bold text-zinc-700 hover:bg-zinc-50 transition-colors font-karla cursor-pointer"
+              >
+                Voltar
+              </button>
+              <button
+                type="button"
+                disabled={enviandoRecusa}
+                onClick={async () => {
+                  const just = justificativaRecusaInput.trim();
+                  if (!just) {
+                    setErroRecusa("É obrigatório informar uma justificativa para recusar a reunião.");
+                    return;
+                  }
+                  setEnviandoRecusa(true);
+                  try {
+                    const res = await recusarConviteReuniao(conviteParaRecusar.id, just);
+                    if (!res.ok) {
+                      setErroRecusa(res.erro || "Erro ao recusar convite.");
+                    } else {
+                      setNotificacoesState((prev) =>
+                        prev.filter((n) => n.id !== conviteParaRecusar.notifId)
+                      );
+                      setConviteParaRecusar(null);
+                      router.refresh();
+                    }
+                  } catch {
+                    setErroRecusa("Erro ao recusar convite.");
+                  } finally {
+                    setEnviandoRecusa(false);
+                  }
+                }}
+                className="rounded-xl bg-red-600 px-4 py-2 text-xs font-bold text-white hover:bg-red-700 disabled:opacity-50 transition-colors font-karla cursor-pointer"
+              >
+                {enviandoRecusa ? "Recusando..." : "Confirmar recusa"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }
