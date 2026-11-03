@@ -30,24 +30,21 @@ interface TopbarHeaderProps {
 const PROFESSOR_LINKS_PRINCIPAIS = [
   { href: "/painel", label: "Painel" },
   { href: "/reunioes", label: "Reuniões" },
-  { href: "/buscar", label: "Buscar" },
+  { href: "/roadmap", label: "Quadro de Atividades" },
+  { href: "/canvas", label: "Canvas de Pesquisa" },
 ];
 
-const PROFESSOR_LINKS_CONFIG = [
-  { href: "/configuracoes/alertas", label: "Config. alertas" },
-  { href: "/coorientadores", label: "Coorientadores" },
-];
+const PROFESSOR_LINKS_CONFIG: { href: string; label: string }[] = [];
 
 const ALUNO_LINKS_PRINCIPAIS = [
   { href: "/inicio", label: "Início" },
   { href: "/reunioes", label: "Reuniões" },
-  { href: "/entregas", label: "Entregas" },
+  { href: "/roadmap", label: "Quadro de Atividades" },
+  { href: "/canvas", label: "Canvas de Pesquisa" },
   { href: "/producao", label: "Produção científica" },
 ];
 
-const ALUNO_LINKS_CONFIG = [
-  { href: "/privacidade", label: "Privacidade e Dados" },
-];
+const ALUNO_LINKS_CONFIG: { href: string; label: string }[] = [];
 function renderNavIcon(href: string) {
   switch (href) {
     case "/alertas":
@@ -96,6 +93,18 @@ function renderNavIcon(href: string) {
       return (
         <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9A2.25 2.25 0 0013.5 5.25h-9A2.25 2.25 0 002.25 7.5v9A2.25 2.25 0 004.5 18.75z" />
+        </svg>
+      );
+    case "/roadmap":
+      return (
+        <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 4.5v15m6-15v15m-10.5-15h15a2.25 2.25 0 012.25 2.25v10.5a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V6.75A2.25 2.25 0 014.5 4.5z" />
+        </svg>
+      );
+    case "/canvas":
+      return (
+        <svg className="h-5 w-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.75}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m1-3l1 3m5-3l1 3m-1-3l-1 3M6.75 6.75h10.5M6.75 9.75h4.5" />
         </svg>
       );
     case "/entregas":
@@ -399,6 +408,7 @@ export function TopbarHeader({
                                       <Link
                                         href="/alertas"
                                         className="text-[#133C1B] font-semibold hover:underline font-karla"
+                                        suppressHydrationWarning
                                       >
                                         Ver →
                                       </Link>
@@ -418,20 +428,27 @@ export function TopbarHeader({
                                           } catch {}
                                         }}
                                         className="text-[#133C1B] font-semibold hover:underline font-karla"
+                                        suppressHydrationWarning
                                       >
-                                        {notif.tipo === "NOVA_MARCACAO"
-                                          ? "Ver artigo →"
-                                          : notif.link?.includes("/producao")
-                                          ? "Ver produção →"
-                                          : notif.tipo === "DIAS_SEM_REUNIAO"
-                                          ? "Agendar reunião →"
-                                          : "Acessar →"}
+                                        <span suppressHydrationWarning>
+                                          {notif.tipo === "NOVA_MARCACAO"
+                                            ? "Ver artigo →"
+                                            : notif.link?.includes("/producao")
+                                            ? "Ver produção →"
+                                            : notif.link?.includes("/roadmap")
+                                            ? "Ver atividades →"
+                                            : notif.tipo === "DIAS_SEM_REUNIAO"
+                                            ? "Agendar reunião →"
+                                            : notif.linkRotulo
+                                            ? `${notif.linkRotulo} →`
+                                            : "Acessar →"}
+                                        </span>
                                       </Link>
                                       <button
                                         type="button"
                                         onClick={async () => {
                                           try {
-                                            if (notif.tipo === "NOVA_MARCACAO") {
+                                            if (notif.tipo === "NOVA_MARCACAO" || notif.tipo === "NOVA_ATIVIDADE") {
                                               await marcarNotificacaoAlunoComoLida(notif.id);
                                             } else {
                                               await resolverAlertaAluno(notif.id);
@@ -476,10 +493,13 @@ export function TopbarHeader({
                                   </div>
                                 ) : notif.alunoId ? (
                                   <Link
-                                    href={`/alunos/${notif.alunoId}`}
+                                    href={notif.link || `/alunos/${notif.alunoId}`}
                                     className="text-[#133C1B] font-medium hover:underline font-karla"
+                                    suppressHydrationWarning
                                   >
-                                    Acessar orientando →
+                                    <span suppressHydrationWarning>
+                                      {notif.linkRotulo ? `${notif.linkRotulo} →` : "Acessar orientando →"}
+                                    </span>
                                   </Link>
                                 ) : <span />}
                                 <span className="text-[10px] text-zinc-400" suppressHydrationWarning>
@@ -569,32 +589,6 @@ export function TopbarHeader({
                       />
                     </svg>
                     Perfil
-                  </Link>
-
-                  {/* Configurações */}
-                  <Link
-                    href={isAluno ? "/privacidade" : "/configuracoes/alertas"}
-                    className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-zinc-700 transition-colors hover:bg-zinc-100 hover:text-zinc-900"
-                  >
-                    <svg
-                      className="h-4 w-4 text-zinc-500"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={1.75}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"
-                      />
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                      />
-                    </svg>
-                    Configurações
                   </Link>
 
                   <div className="my-1 border-t border-zinc-100" />
@@ -692,33 +686,35 @@ export function TopbarHeader({
             </div>
           </div>
 
-          <div>
-            <div className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-white/50 font-karla">
-              {isAluno ? "Opções" : "Configurações"}
+          {linksConfig.length > 0 && (
+            <div>
+              <div className="px-3 pb-2 text-[11px] font-semibold uppercase tracking-wider text-white/50 font-karla">
+                {isAluno ? "Opções" : "Configurações"}
+              </div>
+              <div className="space-y-1">
+                {linksConfig.map((item) => {
+                  const ativo = pathname === item.href;
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      onClick={() => setSidebarOpen(false)}
+                      className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all font-karla ${
+                        ativo
+                          ? "bg-white text-[#133C1B] font-bold shadow-sm"
+                          : "text-white/85 hover:bg-white/10 hover:text-white"
+                      }`}
+                    >
+                      <span className={ativo ? "text-[#133C1B]" : "text-white/75"}>
+                        {renderNavIcon(item.href)}
+                      </span>
+                      <span>{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
             </div>
-            <div className="space-y-1">
-              {linksConfig.map((item) => {
-                const ativo = pathname === item.href;
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setSidebarOpen(false)}
-                    className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all font-karla ${
-                      ativo
-                        ? "bg-white text-[#133C1B] font-bold shadow-sm"
-                        : "text-white/85 hover:bg-white/10 hover:text-white"
-                    }`}
-                  >
-                    <span className={ativo ? "text-[#133C1B]" : "text-white/75"}>
-                      {renderNavIcon(item.href)}
-                    </span>
-                    <span>{item.label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
+          )}
         </nav>
       </aside>
 
