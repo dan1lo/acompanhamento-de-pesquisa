@@ -14,29 +14,57 @@ export function CheckinForm({
   const acao = preencherCheckin.bind(null, reuniaoId);
 
   return (
-    <FormErrorBanner action={acao} className="space-y-3">
-      <Campo name="oQueFez" label="O que você fez desde a última reunião?" defaultValue={valores?.oQueFez ?? ""} />
-      <Campo name="duvidas" label="Dúvidas" defaultValue={valores?.duvidas ?? ""} />
-      <Campo name="bloqueios" label="Algum bloqueio?" defaultValue={valores?.bloqueios ?? ""} />
-      <SubmitButton className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white">
-        {valores ? "Atualizar check-in" : "Enviar check-in"}
-      </SubmitButton>
+    <FormErrorBanner action={acao} className="space-y-3.5">
+      <Campo
+        name="oQueFez"
+        label="O que você realizou desde a última reunião?"
+        placeholder="Descreva suas leituras, escrita, experimentos..."
+        defaultValue={valores?.oQueFez ?? ""}
+      />
+      <Campo
+        name="duvidas"
+        label="Quais dúvidas você quer discutir?"
+        placeholder="Pontos teóricos, metodológicos ou práticos..."
+        defaultValue={valores?.duvidas ?? ""}
+      />
+      <Campo
+        name="bloqueios"
+        label="Algum bloqueio ou dificuldade técnica?"
+        placeholder="Acesso a dados, ferramentas, orientações..."
+        defaultValue={valores?.bloqueios ?? ""}
+      />
+      <div className="pt-1">
+        <SubmitButton className="inline-flex items-center justify-center rounded-xl bg-[#133C1B] px-4 py-2 text-xs font-semibold text-white hover:bg-[#1a4f24] active:scale-95 transition-all font-karla cursor-pointer shadow-xs">
+          {valores ? "Atualizar check-in pré-reunião" : "Enviar check-in pré-reunião"}
+        </SubmitButton>
+      </div>
     </FormErrorBanner>
   );
 }
 
-function Campo({ name, label, defaultValue }: { name: string; label: string; defaultValue: string }) {
+function Campo({
+  name,
+  label,
+  placeholder,
+  defaultValue,
+}: {
+  name: string;
+  label: string;
+  placeholder?: string;
+  defaultValue: string;
+}) {
   return (
-    <div className="space-y-1">
-      <label htmlFor={name} className="text-xs font-medium text-zinc-600">
+    <div className="space-y-1 text-left">
+      <label htmlFor={name} className="text-xs font-semibold uppercase tracking-wider text-zinc-600 font-karla">
         {label}
       </label>
       <textarea
         id={name}
         name={name}
         rows={2}
+        placeholder={placeholder}
         defaultValue={defaultValue}
-        className="w-full rounded-md border border-zinc-300 px-2 py-1.5 text-sm"
+        className="w-full rounded-xl border border-zinc-200 bg-zinc-50/50 p-2.5 text-xs text-zinc-800 focus:border-[#133C1B] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#133C1B]/20 font-spectral transition-all placeholder:text-zinc-400"
       />
     </div>
   );
