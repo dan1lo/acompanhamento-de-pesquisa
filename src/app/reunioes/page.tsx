@@ -8,12 +8,19 @@ import {
   verificarEObterAlertasProfessor,
 } from "@/lib/dados-alertas";
 import { obterDadosCalendario } from "@/lib/actions/calendario";
-import { CalendarioContent } from "./calendario-content";
+import { obterHistoricoReunioes } from "@/lib/actions/historico-reunioes";
+import { obterGestaoAtividades } from "@/lib/actions/atividades-reuniao";
+import { ReunioesTabsContainer } from "./reunioes-tabs-container";
 
 export default async function ReunioesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ google?: string; modal?: string }>;
+  searchParams: Promise<{
+    google?: string;
+    modal?: string;
+    aba?: string;
+    alunoId?: string;
+  }>;
 }) {
   const session = await auth();
 
@@ -36,10 +43,12 @@ export default async function ReunioesPage({
 
   const isAluno = usuario.papel === "ALUNO";
   const hoje = new Date();
-  const dadosIniciais = await obterDadosCalendario(
-    hoje.getMonth() + 1,
-    hoje.getFullYear()
-  );
+
+  const [dadosCalendario, historico, gestaoAtividades] = await Promise.all([
+    obterDadosCalendario(hoje.getMonth() + 1, hoje.getFullYear()),
+    obterHistoricoReunioes(params.alunoId),
+    obterGestaoAtividades(params.alunoId),
+  ]);
 
   if (isAluno) {
     let aluno = usuario.aluno;
@@ -76,26 +85,24 @@ export default async function ReunioesPage({
         />
         <main className="w-full flex-1 px-4 sm:px-6 lg:px-8 py-6 sm:py-8 font-spectral">
           <div className="relative min-h-[calc(100vh-10rem)] flex flex-col pb-24 text-left">
-            <div className="mb-6 sm:mb-8 text-left w-full">
+            <div className="mb-6 sm:mb-8 text-left w-full print:hidden">
               <p className="text-sm sm:text-base text-zinc-600 font-spectral leading-relaxed text-left">
-                Marque e fique por dentro das reuniões marcadas com o seu orientador.
+                Marque e fique por dentro das reuniões marcadas com o seu orientador, visualize o histórico e gerencie as atividades combinadas.
               </p>
             </div>
 
-            <CalendarioContent
+            <ReunioesTabsContainer
               isAluno={true}
               userEmail={usuario.email}
-              reunioesIniciais={dadosIniciais.reunioes}
-              bloqueiosIniciais={dadosIniciais.bloqueios}
-              googleConectadoInicial={dadosIniciais.googleConectado}
-              emailGoogleConectadoInicial={dadosIniciais.emailGoogleConectado}
-              orientandosIniciais={dadosIniciais.orientandos}
-              orientadorInicial={dadosIniciais.orientador}
-              convitesIniciais={dadosIniciais.convites}
+              dadosCalendario={dadosCalendario}
+              historico={historico}
+              gestaoAtividades={gestaoAtividades}
               googleCallbackStatus={params.google}
               abrirModalGoogleInicial={
                 params.modal === "google" || Boolean(params.google)
               }
+              abaInicial={params.aba}
+              alunoId={params.alunoId}
             />
           </div>
         </main>
@@ -117,26 +124,24 @@ export default async function ReunioesPage({
       />
       <main className="w-full flex-1 px-4 sm:px-6 lg:px-8 py-6 sm:py-8 font-spectral">
         <div className="relative min-h-[calc(100vh-10rem)] flex flex-col pb-24 text-left">
-          <div className="mb-6 sm:mb-8 text-left w-full">
+          <div className="mb-6 sm:mb-8 text-left w-full print:hidden">
             <p className="text-sm sm:text-base text-zinc-600 font-spectral leading-relaxed text-left">
-              Marque e fique por dentro das reuniões marcadas com o(s) seu(s) orientando(s).
+              Marque e acompanhe as reuniões com seus orientandos, consulte o histórico de atas e gerencie as atividades combinadas em cada encontro.
             </p>
           </div>
 
-          <CalendarioContent
+          <ReunioesTabsContainer
             isAluno={false}
             userEmail={usuario.email}
-            reunioesIniciais={dadosIniciais.reunioes}
-            bloqueiosIniciais={dadosIniciais.bloqueios}
-            googleConectadoInicial={dadosIniciais.googleConectado}
-            emailGoogleConectadoInicial={dadosIniciais.emailGoogleConectado}
-            orientandosIniciais={dadosIniciais.orientandos}
-            orientadorInicial={dadosIniciais.orientador}
-            convitesIniciais={dadosIniciais.convites}
+            dadosCalendario={dadosCalendario}
+            historico={historico}
+            gestaoAtividades={gestaoAtividades}
             googleCallbackStatus={params.google}
             abrirModalGoogleInicial={
               params.modal === "google" || Boolean(params.google)
             }
+            abaInicial={params.aba}
+            alunoId={params.alunoId}
           />
         </div>
       </main>
