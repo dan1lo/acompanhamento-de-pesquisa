@@ -3,6 +3,8 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --font-karla: "Karla", sans-serif;
+  --font-spectral: "Spectral", Georgia, serif;
 }
 
 @theme inline {
@@ -34,4 +36,31 @@ h6 {
 .font-spectral {
   font-family: var(--font-spectral), Georgia, serif;
 }
+
+.pdf-text-layer {
+  position: absolute;
+  left: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  overflow: hidden;
+  line-height: 1;
+  text-size-adjust: none;
+  user-select: text;
+}
+
+.pdf-text-layer > div,
+.pdf-text-layer > span {
+  color: transparent;
+  position: absolute;
+  white-space: pre;
+  cursor: text;
+  transform-origin: 0% 0%;
+}
+
+.pdf-text-layer ::selection {
+  background: rgba(19, 138, 7, 0.28);
+  color: transparent;
+}
+
 

@@ -12,11 +12,20 @@ export default async function ProducaoAlunoPage() {
   });
 
   const extrasMap = await buscarExtrasProducoes(producoes.map((p) => p.id));
-  const producoesEnriquecidas = producoes.map((p) => ({
-    ...p,
-    overleafUrl: extrasMap[p.id]?.overleafUrl ?? (p as { overleafUrl?: string | null }).overleafUrl ?? null,
-    comentariosJson: extrasMap[p.id]?.comentariosJson ?? (p as { comentariosJson?: string | null }).comentariosJson ?? null,
-  }));
+  const producoesEnriquecidas = producoes.map((p) => {
+    const ext = extrasMap[p.id];
+    return {
+      ...p,
+      comentariosJson: ext?.comentariosJson ?? null,
+      versaoAtual: ext?.versaoAtual ?? 1,
+      pdfNomeArquivo: ext?.pdfNomeArquivo ?? null,
+      pdfTamanhoBytes: ext?.pdfTamanhoBytes ?? null,
+      pdfTotalPaginas: ext?.pdfTotalPaginas ?? 1,
+      notaVersaoAtual: ext?.notaVersaoAtual ?? null,
+      historicoVersoesJson: ext?.historicoVersoesJson ?? null,
+      temPdf: ext?.temPdf ?? false,
+    };
+  });
 
   return <ProducaoContent producoes={producoesEnriquecidas} />;
 }

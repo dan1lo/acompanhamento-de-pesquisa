@@ -11,10 +11,14 @@ export interface ProducaoItem {
   venue: string | null;
   status: "EM_ESCRITA" | "SUBMETIDO" | "EM_REVISAO" | "ACEITO" | "PUBLICADO";
   prazoSubmissao: Date | null;
-  googleDocsUrl?: string | null;
-  overleafUrl?: string | null;
   comentariosJson?: string | null;
-  conteudo?: string | null;
+  versaoAtual?: number;
+  pdfNomeArquivo?: string | null;
+  pdfTamanhoBytes?: number | null;
+  pdfTotalPaginas?: number | null;
+  notaVersaoAtual?: string | null;
+  historicoVersoesJson?: string | null;
+  temPdf?: boolean;
   criadoEm: Date;
 }
 
@@ -37,6 +41,23 @@ function contarComentariosPendentes(jsonStr?: string | null): number {
   }
 }
 
+function contarVersoesHistorico(jsonStr?: string | null): number {
+  if (!jsonStr) return 0;
+  try {
+    const parsed = JSON.parse(jsonStr);
+    return Array.isArray(parsed) ? parsed.length : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function formatarTamanhoArquivo(bytes?: number | null): string {
+  if (!bytes || bytes <= 0) return "";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
 function getStatusBadgeStyle(status: string) {
   switch (status) {
     case "EM_ESCRITA":
@@ -54,19 +75,6 @@ function getStatusBadgeStyle(status: string) {
   }
 }
 
-function OverleafIcon({ className = "h-4 w-4" }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      aria-hidden="true"
-    >
-      <path d="M19.8 3.2C14.6 3.2 9.5 6.1 7.1 10.8c-1.4 2.7-1.6 5.8-.5 8.4l-2.3 2.3a.75.75 0 1 0 1.06 1.06l2.28-2.28c1.4.5 3 .7 4.66.5 4.9-.6 8.5-4.9 8.5-10.3 0-2.6-.5-5.1-1-7.28zm-7.7 15.1c-1.2.15-2.35-.02-3.38-.42 1.88-1.98 4.44-4.23 7.38-5.58a.75.75 0 0 0-.62-1.36c-3.17 1.45-5.88 3.82-7.85 5.88-.58-1.8-.34-3.85.67-5.8 1.98-3.84 6.12-6.24 10.37-6.37.28 1.47.53 3.16.53 4.85 0 4.44-3.02 8.07-7.1 8.8z" />
-    </svg>
-  );
-}
-
 function SleepyFaceIcon({ className = "h-24 w-24" }: { className?: string }) {
   return (
     <svg
@@ -76,7 +84,6 @@ function SleepyFaceIcon({ className = "h-24 w-24" }: { className?: string }) {
       xmlns="http://www.w3.org/2000/svg"
       aria-hidden="true"
     >
-      {/* Contorno e fundo suave do rostinho em tons neutros (cinza/zinc) */}
       <circle
         cx="40"
         cy="44"
@@ -85,53 +92,31 @@ function SleepyFaceIcon({ className = "h-24 w-24" }: { className?: string }) {
         stroke="#A1A1AA"
         strokeWidth="2.5"
       />
-
-      {/* Olho esquerdo sonolento em cinza grafite neutro */}
       <path
         d="M27 40C29 44 35 44 37 40"
         stroke="#52525B"
         strokeWidth="3"
         strokeLinecap="round"
       />
-
-      {/* Olho direito sonolento em cinza grafite neutro */}
       <path
         d="M43 40C45 44 51 44 53 40"
         stroke="#52525B"
         strokeWidth="3"
         strokeLinecap="round"
       />
-
-      {/* Boquinha de sono / bocejo em cinza grafite neutro */}
-      <ellipse
-        cx="40"
-        cy="55"
-        rx="4.5"
-        ry="6"
-        fill="#52525B"
-      />
-
-      {/* Bochechinhas neutras sutis */}
-      <ellipse
-        cx="23"
-        cy="49"
-        rx="3.5"
-        ry="2"
-        fill="#E4E4E7"
-      />
-      <ellipse
-        cx="57"
-        cy="49"
-        rx="3.5"
-        ry="2"
-        fill="#E4E4E7"
-      />
-
-      {/* Letras Zzz em cinza médio neutro */}
+      <ellipse cx="40" cy="55" rx="4.5" ry="6" fill="#52525B" />
+      <ellipse cx="23" cy="49" rx="3.5" ry="2" fill="#E4E4E7" />
+      <ellipse cx="57" cy="49" rx="3.5" ry="2" fill="#E4E4E7" />
       <g fill="#71717A" className="font-karla font-bold">
-        <text x="56" y="24" fontSize="15" fontWeight="bold">Z</text>
-        <text x="65" y="16" fontSize="12" fontWeight="bold">z</text>
-        <text x="71" y="9" fontSize="9" fontWeight="bold">z</text>
+        <text x="56" y="24" fontSize="15" fontWeight="bold">
+          Z
+        </text>
+        <text x="65" y="16" fontSize="12" fontWeight="bold">
+          z
+        </text>
+        <text x="71" y="9" fontSize="9" fontWeight="bold">
+          z
+        </text>
       </g>
     </svg>
   );
@@ -139,13 +124,11 @@ function SleepyFaceIcon({ className = "h-24 w-24" }: { className?: string }) {
 
 export function ProducaoContent({ producoes }: { producoes: ProducaoItem[] }) {
   const [modalAberto, setModalAberto] = useState(false);
-  const [vincularOverleaf, setVincularOverleaf] = useState(false);
-  const [vincularDocs, setVincularDocs] = useState(false);
+  const [arquivoSelecionado, setArquivoSelecionado] = useState<File | null>(null);
   const [erro, setErro] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const modalRef = useRef<HTMLDivElement>(null);
 
-  // Fechar com a tecla ESC
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape" && modalAberto) {
@@ -156,7 +139,6 @@ export function ProducaoContent({ producoes }: { producoes: ProducaoItem[] }) {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [modalAberto]);
 
-  // Bloquear rolagem do body quando modal estiver aberto
   useEffect(() => {
     if (modalAberto) {
       document.body.style.overflow = "hidden";
@@ -177,8 +159,7 @@ export function ProducaoContent({ producoes }: { producoes: ProducaoItem[] }) {
       try {
         await criarProducaoAcademica(formData);
         setModalAberto(false);
-        setVincularOverleaf(false);
-        setVincularDocs(false);
+        setArquivoSelecionado(null);
       } catch (err: unknown) {
         if (err instanceof Error) {
           setErro(err.message);
@@ -191,14 +172,12 @@ export function ProducaoContent({ producoes }: { producoes: ProducaoItem[] }) {
 
   return (
     <div className="relative min-h-[calc(100vh-12rem)] flex flex-col pb-24 text-left">
-      {/* Descrição da página alinhada à esquerda logo abaixo da topbar */}
       <div className="mb-6 sm:mb-8 text-left w-full">
         <p className="text-sm sm:text-base text-zinc-600 font-spectral leading-relaxed text-left">
-          Organize, acompanhe e desenvolva seus trabalhos em produção com o(s) seu(s) orientador(es) aqui.
+          Envie o arquivo PDF dos seus artigos e manuscritos em desenvolvimento, acompanhe as marcações e comentários do orientador diretamente sobre o PDF e gerencie o histórico de versões.
         </p>
       </div>
 
-      {/* Conteúdo principal: estado vazio ou lista de produções */}
       {producoes.length === 0 ? (
         <div className="flex flex-1 flex-col items-center justify-center py-20 sm:py-28 text-center my-auto">
           <SleepyFaceIcon className="h-24 w-24 sm:h-28 sm:w-28 drop-shadow-xs transition-transform hover:scale-105 duration-300" />
@@ -208,95 +187,35 @@ export function ProducaoContent({ producoes }: { producoes: ProducaoItem[] }) {
         </div>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 text-left">
-          {producoes.map((p) => (
-            <div
-              key={p.id}
-              className="flex flex-col justify-between rounded-2xl border border-zinc-200/90 bg-white p-5 shadow-xs hover:shadow-md transition-shadow space-y-4 text-left"
-            >
-              <div>
-                <div className="flex items-start justify-between gap-3 mb-2">
-                  <h2 className="text-base sm:text-lg font-bold text-zinc-900 font-karla leading-snug">
-                    {p.titulo}
-                  </h2>
-                  <span
-                    className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold font-karla ${getStatusBadgeStyle(
-                      p.status
-                    )}`}
-                  >
-                    {ROTULOS_STATUS[p.status]}
-                  </span>
-                </div>
+          {producoes.map((p) => {
+            const pendentes = contarComentariosPendentes(p.comentariosJson);
+            const qtdHistorico = contarVersoesHistorico(p.historicoVersoesJson);
+            const versaoNum = p.versaoAtual || 1;
+            const tamanhoStr = formatarTamanhoArquivo(p.pdfTamanhoBytes);
 
-                {p.venue && (
-                  <div className="flex items-center gap-1.5 text-xs sm:text-sm text-zinc-600 font-spectral mt-1">
-                    <svg
-                      className="h-4 w-4 text-zinc-400 shrink-0"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={1.75}
+            return (
+              <div
+                key={p.id}
+                className="flex flex-col justify-between rounded-2xl border border-zinc-200/90 bg-white p-5 shadow-xs hover:shadow-md transition-shadow space-y-4 text-left"
+              >
+                <div>
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <h2 className="text-base sm:text-lg font-bold text-zinc-900 font-karla leading-snug">
+                      {p.titulo}
+                    </h2>
+                    <span
+                      className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold font-karla ${getStatusBadgeStyle(
+                        p.status
+                      )}`}
                     >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"
-                      />
-                    </svg>
-                    <span className="truncate">{p.venue}</span>
+                      {ROTULOS_STATUS[p.status]}
+                    </span>
                   </div>
-                )}
 
-                {/* Badges de vinculação */}
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  {p.overleafUrl && (
-                    <span className="inline-flex items-center gap-1 rounded-md bg-emerald-50 px-2 py-0.5 text-xs font-medium text-[#138A07] border border-emerald-200/90">
-                      <OverleafIcon className="h-3.5 w-3.5 shrink-0" />
-                      Overleaf Vinculado
-                    </span>
-                  )}
-                  {p.googleDocsUrl && (
-                    <span className="inline-flex items-center gap-1 rounded-md bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 border border-blue-200/80">
-                      <svg className="h-3 w-3 shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM13 3.5L18.5 9H13V3.5zM16 17H8v-2h8v2zm0-4H8v-2h8v2z" />
-                      </svg>
-                      Google Docs Vinculado
-                    </span>
-                  )}
-                  {!p.overleafUrl && !p.googleDocsUrl && (
-                    <span className="inline-flex items-center gap-1 rounded-md bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 border border-zinc-200/80">
-                      <svg className="h-3 w-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
-                      </svg>
-                      Editor Scholab
-                    </span>
-                  )}
-
-                  {(() => {
-                    const pendentes = contarComentariosPendentes(p.comentariosJson);
-                    return (
-                      <span
-                        className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold font-karla border ${
-                          pendentes > 0
-                            ? "bg-amber-50 text-amber-800 border-amber-300"
-                            : "bg-zinc-100 text-zinc-600 border-zinc-200/80"
-                        }`}
-                      >
-                        <svg className="h-3.5 w-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
-                        </svg>
-                        {pendentes} {pendentes === 1 ? "comentário para resolver" : "comentários para resolver"}
-                      </span>
-                    );
-                  })()}
-                </div>
-              </div>
-
-              <div className="border-t border-zinc-100 pt-3 flex flex-col gap-3">
-                <div className="flex items-center justify-between text-xs text-zinc-500 font-spectral">
-                  {p.prazoSubmissao ? (
-                    <div className="flex items-center gap-1 text-amber-700 font-medium">
+                  {p.venue && (
+                    <div className="flex items-center gap-1.5 text-xs sm:text-sm text-zinc-600 font-spectral mt-1">
                       <svg
-                        className="h-4 w-4 shrink-0"
+                        className="h-4 w-4 text-zinc-400 shrink-0"
                         fill="none"
                         viewBox="0 0 24 24"
                         stroke="currentColor"
@@ -305,86 +224,167 @@ export function ProducaoContent({ producoes }: { producoes: ProducaoItem[] }) {
                         <path
                           strokeLinecap="round"
                           strokeLinejoin="round"
-                          d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"
+                          d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25"
                         />
                       </svg>
-                      <span>Prazo: {formatarData(new Date(p.prazoSubmissao))}</span>
+                      <span className="truncate">{p.venue}</span>
                     </div>
-                  ) : (
-                    <span>Sem prazo definido</span>
                   )}
-                  <span>Criado em {formatarData(new Date(p.criadoEm))}</span>
+
+                  {/* Badges de versão PDF, histórico e marcações */}
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span className="inline-flex items-center gap-1.5 rounded-md bg-[#133C1B]/10 px-2.5 py-0.5 text-xs font-bold text-[#133C1B] border border-[#133C1B]/20 font-karla">
+                      <svg
+                        className="h-3.5 w-3.5 shrink-0"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
+                        />
+                      </svg>
+                      Versão {versaoNum} · PDF
+                    </span>
+
+                    {qtdHistorico > 0 && (
+                      <span className="inline-flex items-center gap-1 rounded-md bg-zinc-100 px-2 py-0.5 text-xs font-semibold text-zinc-700 border border-zinc-200/90 font-karla">
+                        {qtdHistorico}{" "}
+                        {qtdHistorico === 1
+                          ? "versão anterior no histórico"
+                          : "versões anteriores no histórico"}
+                      </span>
+                    )}
+
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold font-karla border ${
+                        pendentes > 0
+                          ? "bg-amber-50 text-amber-800 border-amber-300"
+                          : "bg-zinc-100 text-zinc-600 border-zinc-200/80"
+                      }`}
+                    >
+                      <svg
+                        className="h-3.5 w-3.5 shrink-0"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z"
+                        />
+                      </svg>
+                      {pendentes}{" "}
+                      {pendentes === 1
+                        ? "marcação pendente"
+                        : "marcações pendentes"}
+                    </span>
+                  </div>
+
+                  {/* Informações do arquivo PDF atual */}
+                  <div className="mt-2.5 flex items-center gap-2 text-xs text-zinc-500 font-karla">
+                    <span className="truncate font-medium text-zinc-700">
+                      {p.pdfNomeArquivo || `${p.titulo}.pdf`}
+                    </span>
+                    {p.pdfTotalPaginas ? (
+                      <span>
+                        · {p.pdfTotalPaginas}{" "}
+                        {p.pdfTotalPaginas === 1 ? "pág." : "págs."}
+                      </span>
+                    ) : null}
+                    {tamanhoStr ? <span>· {tamanhoStr}</span> : null}
+                  </div>
                 </div>
 
-                {/* Botões de Ação */}
-                <div className="flex flex-wrap items-center justify-end gap-2 pt-1 border-t border-zinc-50">
-                  {p.overleafUrl && (
+                <div className="border-t border-zinc-100 pt-3 flex flex-col gap-3">
+                  <div className="flex items-center justify-between text-xs text-zinc-500 font-spectral">
+                    {p.prazoSubmissao ? (
+                      <div className="flex items-center gap-1 text-amber-700 font-medium">
+                        <svg
+                          className="h-4 w-4 shrink-0"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={1.75}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z"
+                          />
+                        </svg>
+                        <span>
+                          Prazo: {formatarData(new Date(p.prazoSubmissao))}
+                        </span>
+                      </div>
+                    ) : (
+                      <span>Sem prazo definido</span>
+                    )}
+                    <span>Criado em {formatarData(new Date(p.criadoEm))}</span>
+                  </div>
+
+                  {/* Botões de Ação */}
+                  <div className="flex flex-wrap items-center justify-end gap-2 pt-1 border-t border-zinc-50">
                     <a
-                      href={p.overleafUrl}
+                      href={`/api/producoes/${p.id}/pdf?download=1`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-emerald-200 bg-emerald-50/50 px-3 py-1.5 text-xs font-semibold text-[#138A07] hover:bg-emerald-50 hover:border-emerald-300 transition-colors font-karla"
-                      title="Abrir projeto no Overleaf"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 px-3 py-1.5 text-xs font-semibold text-zinc-700 hover:bg-zinc-50 transition-colors font-karla"
                     >
-                      <OverleafIcon className="h-3.5 w-3.5 shrink-0" />
-                      <span>Abrir Overleaf</span>
-                      <svg className="h-3 w-3 text-emerald-600/70" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      <svg
+                        className="h-3.5 w-3.5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+                        />
                       </svg>
+                      <span>Baixar PDF</span>
                     </a>
-                  )}
 
-                  {p.googleDocsUrl && (
-                    <a
-                      href={p.googleDocsUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1.5 rounded-xl border border-zinc-200 px-3 py-1.5 text-xs font-semibold text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900 transition-colors font-karla"
-                      title="Abrir arquivo original no Google Docs"
+                    <Link
+                      href={`/producao/${p.id}`}
+                      className="inline-flex items-center gap-1.5 rounded-xl bg-[#133C1B] px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-[#1a4f24] active:scale-95 transition-all font-karla cursor-pointer"
                     >
-                      <svg className="h-3.5 w-3.5 text-blue-600 shrink-0" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM13 3.5L18.5 9H13V3.5zM16 17H8v-2h8v2zm0-4H8v-2h8v2z" />
+                      <svg
+                        className="h-3.5 w-3.5"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                        strokeWidth={2}
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
+                        />
                       </svg>
-                      <span>Abrir Docs</span>
-                      <svg className="h-3 w-3 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                      </svg>
-                    </a>
-                  )}
-
-                  <Link
-                    href={`/producao/${p.id}`}
-                    className="inline-flex items-center gap-1.5 rounded-xl bg-[#133C1B] px-3.5 py-1.5 text-xs font-semibold text-white shadow-xs hover:bg-[#1a4f24] active:scale-95 transition-all font-karla cursor-pointer"
-                  >
-                    <svg
-                      className="h-3.5 w-3.5"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125"
-                      />
-                    </svg>
-                    <span>Editar Artigo</span>
-                  </Link>
+                      <span>Ver PDF e Marcações</span>
+                    </Link>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
-      {/* Botão verde escuro sempre presente no canto inferior direito */}
+      {/* Botão fixo no canto inferior direito */}
       <button
         type="button"
         onClick={() => {
           setErro(null);
-          setVincularOverleaf(false);
-          setVincularDocs(false);
+          setArquivoSelecionado(null);
           setModalAberto(true);
         }}
         className="fixed bottom-6 right-6 sm:bottom-8 sm:right-8 z-40 flex items-center gap-2 rounded-full bg-[#133C1B] px-5 py-3.5 text-sm sm:text-base font-semibold text-white shadow-xl hover:bg-[#1a4f24] hover:shadow-2xl active:scale-95 transition-all font-karla tracking-wide cursor-pointer focus:outline-none focus:ring-4 focus:ring-[#133C1B]/30"
@@ -397,12 +397,16 @@ export function ProducaoContent({ producoes }: { producoes: ProducaoItem[] }) {
           stroke="currentColor"
           strokeWidth={2.5}
         >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M12 4.5v15m7.5-7.5h-15"
+          />
         </svg>
         <span>Adicionar Trabalho</span>
       </button>
 
-      {/* Modal para Adicionar Trabalho */}
+      {/* Modal para Adicionar Trabalho via upload de PDF */}
       {modalAberto && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs transition-opacity"
@@ -417,9 +421,14 @@ export function ProducaoContent({ producoes }: { producoes: ProducaoItem[] }) {
             className="relative w-full max-w-lg rounded-2xl bg-white p-6 shadow-2xl border border-zinc-100 space-y-5 text-left max-h-[90vh] overflow-y-auto"
           >
             <div className="flex items-center justify-between border-b border-zinc-100 pb-3">
-              <h2 className="text-lg font-bold text-zinc-900 font-karla">
-                Adicionar Trabalho
-              </h2>
+              <div>
+                <h2 className="text-lg font-bold text-zinc-900 font-karla">
+                  Adicionar Trabalho (PDF)
+                </h2>
+                <p className="text-xs text-zinc-500 font-spectral">
+                  Envie o PDF da primeira versão do seu artigo ou manuscrito para revisão do orientador.
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={() => setModalAberto(false)}
@@ -433,14 +442,20 @@ export function ProducaoContent({ producoes }: { producoes: ProducaoItem[] }) {
                   stroke="currentColor"
                   strokeWidth={2}
                 >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M6 18L18 6M6 6l12 12"
+                  />
                 </svg>
               </button>
             </div>
 
             <form onSubmit={handleFormSubmit} className="space-y-4">
               {erro && (
-                <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{erro}</p>
+                <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 font-karla">
+                  {erro}
+                </p>
               )}
 
               <div className="space-y-1">
@@ -480,133 +495,60 @@ export function ProducaoContent({ producoes }: { producoes: ProducaoItem[] }) {
                 />
               </div>
 
-              {/* Opções de Vinculação Externa */}
-              <div className="space-y-2.5">
-                <span className="block text-xs font-semibold uppercase tracking-wider text-zinc-600 font-karla">
-                  Vincular plataforma externa (opcional)
-                </span>
-
-                {/* Opção 1: Vincular com Overleaf */}
-                <div
-                  className={`rounded-xl border p-3.5 space-y-3 transition-colors ${
-                    vincularOverleaf
-                      ? "border-emerald-300 bg-emerald-50/40"
-                      : "border-zinc-200 bg-zinc-50/70"
-                  }`}
-                >
-                  <label className="flex items-center justify-between cursor-pointer select-none">
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-100 text-[#138A07] shrink-0">
-                        <OverleafIcon className="h-4.5 w-4.5" />
-                      </div>
-                      <div>
-                        <span className="block text-sm font-semibold text-zinc-900 font-karla">
-                          Vincular com Overleaf
-                        </span>
-                        <span className="block text-xs text-zinc-500 font-spectral">
-                          Conecte um projeto LaTeX do Overleaf
-                        </span>
-                      </div>
-                    </div>
-                    <input
-                      type="checkbox"
-                      name="vincularOverleaf"
-                      value="true"
-                      checked={vincularOverleaf}
-                      onChange={(e) => {
-                        const checked = e.target.checked;
-                        setVincularOverleaf(checked);
-                        if (checked) setVincularDocs(false);
-                      }}
-                      className="h-4.5 w-4.5 rounded border-zinc-300 text-[#133C1B] focus:ring-[#133C1B] cursor-pointer"
-                      disabled={isPending}
+              {/* Upload obrigatório do PDF */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase tracking-wider text-zinc-600 font-karla">
+                  Arquivo PDF do Trabalho (Versão 1) *
+                </label>
+                <label className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-[#133C1B]/35 bg-[#133C1B]/[0.03] hover:bg-[#133C1B]/[0.06] p-5 text-center transition-colors cursor-pointer">
+                  <svg
+                    className="h-8 w-8 text-[#133C1B] mb-2"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={1.75}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m6.75 12l-3-3m0 0l-3 3m3-3v6m-1.5-15H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"
                     />
-                  </label>
+                  </svg>
+                  <span className="font-karla text-sm font-bold text-[#133C1B]">
+                    {arquivoSelecionado
+                      ? arquivoSelecionado.name
+                      : "Clique para selecionar o arquivo .PDF"}
+                  </span>
+                  <span className="font-spectral text-xs text-zinc-500 mt-1">
+                    {arquivoSelecionado
+                      ? `${formatarTamanhoArquivo(arquivoSelecionado.size)} · Pronto para envio`
+                      : "Apenas arquivos em formato PDF (máx. 20 MB)"}
+                  </span>
+                  <input
+                    type="file"
+                    name="arquivoPdf"
+                    accept=".pdf,application/pdf"
+                    required
+                    disabled={isPending}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0] ?? null;
+                      setArquivoSelecionado(f);
+                    }}
+                    className="sr-only"
+                  />
+                </label>
+              </div>
 
-                  {vincularOverleaf && (
-                    <div className="pt-2 border-t border-emerald-200/70 space-y-2">
-                      <label className="text-xs font-semibold uppercase tracking-wider text-zinc-600 font-karla">
-                        URL do Projeto no Overleaf *
-                      </label>
-                      <input
-                        name="overleafUrl"
-                        type="url"
-                        required={vincularOverleaf}
-                        placeholder="https://www.overleaf.com/project/... ou link de leitura/edição"
-                        disabled={isPending}
-                        className="w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2 text-sm focus:border-[#133C1B] focus:outline-none focus:ring-2 focus:ring-[#133C1B]/20 transition-all font-spectral disabled:opacity-50"
-                      />
-                      <p className="text-[11px] text-zinc-500 font-spectral leading-relaxed">
-                        💡 Cole o link do seu projeto no Overleaf (ou link compartilhável de leitura/edição) para acessar rapidamente seu artigo LaTeX e acompanhar com seu orientador.
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Opção 2: Vincular com Google Docs */}
-                <div
-                  className={`rounded-xl border p-3.5 space-y-3 transition-colors ${
-                    vincularDocs
-                      ? "border-blue-300 bg-blue-50/30"
-                      : "border-zinc-200 bg-zinc-50/70"
-                  }`}
-                >
-                  <label className="flex items-center justify-between cursor-pointer select-none">
-                    <div className="flex items-center gap-2.5">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-100 text-blue-700 shrink-0">
-                        <svg className="h-4.5 w-4.5" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM13 3.5L18.5 9H13V3.5zM16 17H8v-2h8v2zm0-4H8v-2h8v2z" />
-                        </svg>
-                      </div>
-                      <div>
-                        <span className="block text-sm font-semibold text-zinc-900 font-karla">
-                          Vincular com Google Docs
-                        </span>
-                        <span className="block text-xs text-zinc-500 font-spectral">
-                          Sincronize com um documento já existente
-                        </span>
-                      </div>
-                    </div>
-                    <input
-                      type="checkbox"
-                      name="vincularGoogleDocs"
-                      value="true"
-                      checked={vincularDocs}
-                      onChange={(e) => {
-                        const checked = e.target.checked;
-                        setVincularDocs(checked);
-                        if (checked) setVincularOverleaf(false);
-                      }}
-                      className="h-4.5 w-4.5 rounded border-zinc-300 text-[#133C1B] focus:ring-[#133C1B] cursor-pointer"
-                      disabled={isPending}
-                    />
-                  </label>
-
-                  {vincularDocs && (
-                    <div className="pt-2 border-t border-blue-200/70 space-y-2">
-                      <label className="text-xs font-semibold uppercase tracking-wider text-zinc-600 font-karla">
-                        URL do Documento *
-                      </label>
-                      <input
-                        name="googleDocsUrl"
-                        type="url"
-                        required={vincularDocs}
-                        placeholder="https://docs.google.com/document/d/.../edit"
-                        disabled={isPending}
-                        className="w-full rounded-xl border border-zinc-300 bg-white px-3.5 py-2 text-sm focus:border-[#133C1B] focus:outline-none focus:ring-2 focus:ring-[#133C1B]/20 transition-all font-spectral disabled:opacity-50"
-                      />
-                      <p className="text-[11px] text-zinc-500 font-spectral leading-relaxed">
-                        💡 O documento deve estar configurado para &quot;Qualquer pessoa com o link pode ler/editar&quot; para permitir a sincronização automática.
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {!vincularOverleaf && !vincularDocs && (
-                  <p className="text-xs text-zinc-500 font-spectral px-1">
-                    Sem vínculo externo, você poderá escrever e editar seu artigo diretamente no editor integrado da nossa plataforma.
-                  </p>
-                )}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold uppercase tracking-wider text-zinc-600 font-karla">
+                  Nota desta versão (opcional)
+                </label>
+                <input
+                  name="notaVersao"
+                  placeholder="Ex: Rascunho inicial com introdução e referencial teórico"
+                  disabled={isPending}
+                  className="w-full rounded-xl border border-zinc-300 px-3.5 py-2 text-sm focus:border-[#133C1B] focus:outline-none focus:ring-2 focus:ring-[#133C1B]/20 transition-all font-spectral disabled:opacity-50"
+                />
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-zinc-100">
@@ -625,14 +567,29 @@ export function ProducaoContent({ producoes }: { producoes: ProducaoItem[] }) {
                 >
                   {isPending ? (
                     <>
-                      <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24" fill="none">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                      <svg
+                        className="animate-spin h-4 w-4 text-white"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                      >
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                        />
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8v8H4z"
+                        />
                       </svg>
-                      <span>Adicionando...</span>
+                      <span>Enviando PDF...</span>
                     </>
                   ) : (
-                    <span>Adicionar</span>
+                    <span>Adicionar Produção</span>
                   )}
                 </button>
               </div>

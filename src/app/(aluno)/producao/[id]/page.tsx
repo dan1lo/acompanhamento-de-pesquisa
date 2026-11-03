@@ -32,10 +32,18 @@ export default async function ProducaoEditorPage(props: PageProps) {
   }
 
   const extrasMap = await buscarExtrasProducoes([producao.id]);
+  const ext = extrasMap[producao.id];
+
   const producaoEnriquecida = {
     ...producao,
-    overleafUrl: extrasMap[producao.id]?.overleafUrl ?? (producao as { overleafUrl?: string | null }).overleafUrl ?? null,
-    comentariosJson: extrasMap[producao.id]?.comentariosJson ?? (producao as { comentariosJson?: string | null }).comentariosJson ?? null,
+    comentariosJson: ext?.comentariosJson ?? null,
+    versaoAtual: ext?.versaoAtual ?? 1,
+    pdfNomeArquivo: ext?.pdfNomeArquivo ?? null,
+    pdfTamanhoBytes: ext?.pdfTamanhoBytes ?? null,
+    pdfTotalPaginas: ext?.pdfTotalPaginas ?? 1,
+    notaVersaoAtual: ext?.notaVersaoAtual ?? null,
+    historicoVersoesJson: ext?.historicoVersoesJson ?? null,
+    temPdf: ext?.temPdf ?? false,
   };
 
   return <EditorContent producao={producaoEnriquecida} />;

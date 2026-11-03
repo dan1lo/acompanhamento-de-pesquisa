@@ -1,21 +1,8 @@
 import type { Metadata } from "next";
-import { Karla, Spectral } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { DynamicFavicon } from "@/components/dynamic-favicon";
 import { execSync } from "child_process";
-
-const karla = Karla({
-  variable: "--font-karla",
-  subsets: ["latin"],
-  weight: ["400", "500", "600", "700"],
-});
-
-const spectral = Spectral({
-  variable: "--font-spectral",
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700"],
-});
 
 function getInitialTheme(): "dark" | "light" {
   if (process.platform === "win32") {
@@ -49,7 +36,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="pt-BR"
-      className={`${karla.variable} ${spectral.variable} h-full antialiased`}
+      className="h-full antialiased"
     >
       <head>
         <link
@@ -57,6 +44,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           rel="icon"
           href={initialFavicon}
           type="image/png"
+        />
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Karla:ital,wght@0,400..800;1,400..800&family=Spectral:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap"
+          rel="stylesheet"
         />
       </head>
       <body className="min-h-full flex flex-col bg-zinc-50 text-zinc-900 font-spectral">
