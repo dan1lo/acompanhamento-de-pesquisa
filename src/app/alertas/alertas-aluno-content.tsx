@@ -45,7 +45,37 @@ const ESTILOS_TIPO: Record<
     badgeClass: "bg-amber-100 text-amber-900 border-amber-200",
     dotClass: "bg-amber-500",
   },
+  "Dias sem reunião": {
+    borderClass: "border-l-amber-500",
+    badgeClass: "bg-amber-100 text-amber-900 border-amber-200",
+    dotClass: "bg-amber-500",
+  },
+  INATIVIDADE_ATIVIDADES: {
+    borderClass: "border-l-amber-500",
+    badgeClass: "bg-amber-100 text-amber-900 border-amber-200",
+    dotClass: "bg-amber-500",
+  },
+  "Inatividade em atividades": {
+    borderClass: "border-l-amber-500",
+    badgeClass: "bg-amber-100 text-amber-900 border-amber-200",
+    dotClass: "bg-amber-500",
+  },
   TAREFA_ATRASADA: {
+    borderClass: "border-l-red-500",
+    badgeClass: "bg-red-100 text-red-900 border-red-200",
+    dotClass: "bg-red-500",
+  },
+  ATIVIDADE_ATRASADA: {
+    borderClass: "border-l-red-500",
+    badgeClass: "bg-red-100 text-red-900 border-red-200",
+    dotClass: "bg-red-500",
+  },
+  "Atividade atrasada": {
+    borderClass: "border-l-red-500",
+    badgeClass: "bg-red-100 text-red-900 border-red-200",
+    dotClass: "bg-red-500",
+  },
+  "Tarefa atrasada": {
     borderClass: "border-l-red-500",
     badgeClass: "bg-red-100 text-red-900 border-red-200",
     dotClass: "bg-red-500",
@@ -54,6 +84,41 @@ const ESTILOS_TIPO: Record<
     borderClass: "border-l-yellow-400",
     badgeClass: "bg-yellow-100 text-yellow-900 border-yellow-200",
     dotClass: "bg-yellow-500",
+  },
+  ATIVIDADE_PROXIMA: {
+    borderClass: "border-l-yellow-400",
+    badgeClass: "bg-yellow-100 text-yellow-900 border-yellow-200",
+    dotClass: "bg-yellow-500",
+  },
+  "Prazo de atividade": {
+    borderClass: "border-l-yellow-400",
+    badgeClass: "bg-yellow-100 text-yellow-900 border-yellow-200",
+    dotClass: "bg-yellow-500",
+  },
+  "Prazo próximo": {
+    borderClass: "border-l-yellow-400",
+    badgeClass: "bg-yellow-100 text-yellow-900 border-yellow-200",
+    dotClass: "bg-yellow-500",
+  },
+  ATIVIDADE_CONCLUIDA: {
+    borderClass: "border-l-emerald-600",
+    badgeClass: "bg-emerald-100 text-emerald-900 border-emerald-300",
+    dotClass: "bg-emerald-600",
+  },
+  "Atividade concluída": {
+    borderClass: "border-l-emerald-600",
+    badgeClass: "bg-emerald-100 text-emerald-900 border-emerald-300",
+    dotClass: "bg-emerald-600",
+  },
+  PLANEJAMENTO_PENDENTE: {
+    borderClass: "border-l-blue-500",
+    badgeClass: "bg-blue-100 text-blue-900 border-blue-200",
+    dotClass: "bg-blue-500",
+  },
+  "Planejamento pendente": {
+    borderClass: "border-l-blue-500",
+    badgeClass: "bg-blue-100 text-blue-900 border-blue-200",
+    dotClass: "bg-blue-500",
   },
   FALTA_SEM_AVISO: {
     borderClass: "border-l-red-500",
@@ -66,6 +131,16 @@ const ESTILOS_TIPO: Record<
     dotClass: "bg-blue-500",
   },
   NOVA_MARCACAO: {
+    borderClass: "border-l-[#133C1B]",
+    badgeClass: "bg-emerald-50 text-[#133C1B] border-emerald-200",
+    dotClass: "bg-[#138A07]",
+  },
+  NOVA_ATIVIDADE: {
+    borderClass: "border-l-[#133C1B]",
+    badgeClass: "bg-emerald-50 text-[#133C1B] border-emerald-200",
+    dotClass: "bg-[#138A07]",
+  },
+  "Nova atividade": {
     borderClass: "border-l-[#133C1B]",
     badgeClass: "bg-emerald-50 text-[#133C1B] border-emerald-200",
     dotClass: "bg-[#138A07]",

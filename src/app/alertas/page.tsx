@@ -30,7 +30,116 @@ const ROTULOS_TIPO: Record<string, string> = {
   CONVITE_ORIENTACAO: "Convite de orientação",
   CONVITE_REUNIAO: "Convite de reunião",
   RESPOSTA_CONVITE_REUNIAO: "Resposta de convite",
+  INATIVIDADE_ATIVIDADES: "Inatividade em atividades",
+  ATIVIDADE_ATRASADA: "Atividade atrasada",
+  ATIVIDADE_PROXIMA: "Prazo de atividade",
+  ATIVIDADE_CONCLUIDA: "Atividade concluída",
+  PLANEJAMENTO_PENDENTE: "Planejamento pendente",
+  NOVA_ATIVIDADE: "Nova atividade",
 };
+
+function resolverMetadadosAlerta(
+  a: { tipo: string; mensagem: string; alunoId: string },
+  isAluno: boolean
+): { tipoKey: string; tipoRotulo: string; link: string; linkRotulo: string } {
+  const msg = a.mensagem;
+
+  if (msg.includes("||| INATIVIDADE_") || msg.includes("sem avançar em nenhuma atividade")) {
+    return {
+      tipoKey: "INATIVIDADE_ATIVIDADES",
+      tipoRotulo: "Inatividade em atividades",
+      link: isAluno ? "/roadmap" : `/roadmap?alunoId=${a.alunoId}`,
+      linkRotulo: "Ver Quadro de Atividades",
+    };
+  }
+
+  if (msg.includes("||| ATIVIDADE_ATRASADA") || msg.includes("||| SUBTAREFA_ATRASADA")) {
+    return {
+      tipoKey: "ATIVIDADE_ATRASADA",
+      tipoRotulo: "Atividade atrasada",
+      link: isAluno ? "/roadmap" : `/roadmap?alunoId=${a.alunoId}`,
+      linkRotulo: "Ver Quadro de Atividades",
+    };
+  }
+
+  if (
+    msg.includes("||| ATIVIDADE_HOJE") ||
+    msg.includes("||| ATIVIDADE_AMANHA") ||
+    msg.includes("||| ATIVIDADE_SEMANA") ||
+    msg.includes("||| ATIVIDADE_NAO_INICIADA") ||
+    msg.includes("||| MARCO_")
+  ) {
+    return {
+      tipoKey: "ATIVIDADE_PROXIMA",
+      tipoRotulo: "Prazo de atividade",
+      link: isAluno ? "/roadmap" : `/roadmap?alunoId=${a.alunoId}`,
+      linkRotulo: "Ver Quadro de Atividades",
+    };
+  }
+
+  if (msg.includes("||| ATIVIDADE_CONCLUIDA")) {
+    return {
+      tipoKey: "ATIVIDADE_CONCLUIDA",
+      tipoRotulo: "Atividade concluída",
+      link: isAluno ? "/roadmap" : `/roadmap?alunoId=${a.alunoId}`,
+      linkRotulo: "Ver Quadro de Atividades",
+    };
+  }
+
+  if (msg.includes("||| SEM_ATIVIDADES_")) {
+    return {
+      tipoKey: "PLANEJAMENTO_PENDENTE",
+      tipoRotulo: "Planejamento pendente",
+      link: isAluno ? "/roadmap" : `/roadmap?alunoId=${a.alunoId}`,
+      linkRotulo: "Ver Quadro de Atividades",
+    };
+  }
+
+  if (msg.includes("|||")) {
+    const parts = msg.split("|||").map((s) => s.trim());
+    const producaoId = parts[2];
+    return {
+      tipoKey: a.tipo,
+      tipoRotulo: ROTULOS_TIPO[a.tipo] ?? a.tipo,
+      link: producaoId ? `/producao/${producaoId}` : "/producao",
+      linkRotulo: "Ver produção",
+    };
+  }
+
+  if (a.tipo === "DIAS_SEM_REUNIAO") {
+    return {
+      tipoKey: a.tipo,
+      tipoRotulo: "Dias sem reunião",
+      link: "/reunioes",
+      linkRotulo: isAluno ? "Agendar reunião" : "Acessar reuniões",
+    };
+  }
+
+  if (a.tipo === "CHECKIN_NAO_PREENCHIDO" || a.tipo === "FALTA_SEM_AVISO") {
+    return {
+      tipoKey: a.tipo,
+      tipoRotulo: ROTULOS_TIPO[a.tipo] ?? a.tipo,
+      link: "/reunioes",
+      linkRotulo: "Ver reuniões",
+    };
+  }
+
+  if (a.tipo === "TAREFA_ATRASADA" || a.tipo === "PRAZO_PROXIMO") {
+    return {
+      tipoKey: a.tipo,
+      tipoRotulo: ROTULOS_TIPO[a.tipo] ?? a.tipo,
+      link: isAluno ? "/entregas" : `/alunos/${a.alunoId}`,
+      linkRotulo: isAluno ? "Ver entregas" : "Acompanhar orientando",
+    };
+  }
+
+  return {
+    tipoKey: a.tipo,
+    tipoRotulo: ROTULOS_TIPO[a.tipo] ?? a.tipo,
+    link: isAluno ? "/alertas" : `/alunos/${a.alunoId}`,
+    linkRotulo: isAluno ? "Acessar" : "Acompanhar orientando",
+  };
+}
 
 export default async function AlertasUniversalPage() {
   const session = await auth();
@@ -187,38 +296,21 @@ export default async function AlertasUniversalPage() {
     const itensAluno: AlertaAlunoItem[] = [
       ...convitesReuniaoAluno,
       ...alertasDbUnicos.map((a) => {
-        let link: string | undefined = undefined;
-        let linkRotulo: string | undefined = undefined;
-
-        if (a.mensagem.includes("|||")) {
-          const parts = a.mensagem.split("|||").map((s) => s.trim());
-          const producaoId = parts[2];
-          link = producaoId ? `/producao/${producaoId}` : "/producao";
-          linkRotulo = "Ver produção";
-        } else if (a.tipo === "CHECKIN_NAO_PREENCHIDO") {
-          link = "/reunioes";
-          linkRotulo = "Ver reuniões";
-        } else if (a.tipo === "TAREFA_ATRASADA" || a.tipo === "PRAZO_PROXIMO") {
-          link = "/entregas";
-          linkRotulo = "Ver entregas";
-        } else if (a.tipo === "DIAS_SEM_REUNIAO") {
-          link = "/reunioes";
-          linkRotulo = "Agendar reunião";
-        } else if (a.tipo === "FALTA_SEM_AVISO") {
-          link = "/reunioes";
-          linkRotulo = "Ver reuniões";
-        }
+        const meta = resolverMetadadosAlerta(
+          { tipo: a.tipo, mensagem: a.mensagem, alunoId: a.alunoId },
+          true
+        );
 
         return {
           id: a.id,
           origem: "ALERTA" as const,
-          tipo: a.tipo,
-          tipoRotulo: ROTULOS_TIPO[a.tipo] ?? a.tipo,
+          tipo: meta.tipoKey,
+          tipoRotulo: meta.tipoRotulo,
           mensagem: formatarMensagemAlertaParaAluno(a.mensagem, aluno.nome, a.tipo),
           criadoEm: a.criadoEm.toISOString(),
           resolvido: a.resolvido,
-          link,
-          linkRotulo,
+          link: meta.link,
+          linkRotulo: meta.linkRotulo,
         };
       }),
       ...notificacoesDb.map((n) => {
@@ -235,6 +327,21 @@ export default async function AlertasUniversalPage() {
             mensagem: parts[0],
             criadoEm: new Date(n.criadoEm).toISOString(),
             resolvido: n.lida,
+          };
+        }
+
+        if (n.mensagem.includes("||| QUADRO_ATIVIDADE |||")) {
+          const parts = n.mensagem.split("|||").map((s) => s.trim());
+          return {
+            id: n.id,
+            origem: "NOTIFICACAO" as const,
+            tipo: "NOVA_ATIVIDADE",
+            tipoRotulo: "Nova atividade",
+            mensagem: parts[0],
+            criadoEm: new Date(n.criadoEm).toISOString(),
+            resolvido: n.lida,
+            link: "/roadmap",
+            linkRotulo: "Ver atividades",
           };
         }
 
@@ -352,16 +459,25 @@ export default async function AlertasUniversalPage() {
 
   const itensProfessor: AlertaProfessorItem[] = [
     ...convitesReuniaoProf,
-    ...alertasProfessorUnicos.map((a) => ({
-      id: a.id,
-      tipo: a.tipo,
-      tipoRotulo: ROTULOS_TIPO[a.tipo] ?? a.tipo,
-      mensagem: formatarMensagemAlertaParaProfessor(a.mensagem),
-      criadoEm: a.criadoEm.toISOString(),
-      resolvido: a.resolvido,
-      alunoId: a.alunoId,
-      alunoNome: a.aluno.nome,
-    })),
+    ...alertasProfessorUnicos.map((a) => {
+      const meta = resolverMetadadosAlerta(
+        { tipo: a.tipo, mensagem: a.mensagem, alunoId: a.alunoId },
+        false
+      );
+
+      return {
+        id: a.id,
+        tipo: meta.tipoKey,
+        tipoRotulo: meta.tipoRotulo,
+        mensagem: formatarMensagemAlertaParaProfessor(a.mensagem),
+        criadoEm: a.criadoEm.toISOString(),
+        resolvido: a.resolvido,
+        alunoId: a.alunoId,
+        alunoNome: a.aluno.nome,
+        link: meta.link,
+        linkRotulo: meta.linkRotulo,
+      };
+    }),
   ].sort((a, b) => new Date(b.criadoEm).getTime() - new Date(a.criadoEm).getTime());
 
   return (

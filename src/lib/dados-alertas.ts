@@ -121,12 +121,56 @@ export function formatarMensagemAlertaParaAluno(
 ): string {
   const msg = mensagem.trim().replace(/\s*\(com sala no Google Meet\)/gi, "");
 
-  // Alertas de Produção Acadêmica codificados com título
+  // Alertas codificados com metadados |||
   if (msg.includes("|||")) {
     const parts = msg.split("|||").map((s) => s.trim());
     const msgBase = parts[0];
-    const titulo = parts[1] || "Trabalho";
+    const titulo = parts[1] || "Atividade";
+    const stage = parts[3] || "";
 
+    // 1. Inatividade em Atividades da Pesquisa
+    if (
+      stage === "INATIVIDADE_ATIVIDADES" ||
+      parts[2] === "INATIVIDADE_ATIVIDADES" ||
+      msg.includes("INATIVIDADE_ATIVIDADES")
+    ) {
+      const periodo =
+        parts[4] ||
+        (msgBase.includes("1 mês")
+          ? "1 mês"
+          : msgBase.includes("15 dias")
+          ? "15 dias"
+          : "1 semana");
+      return `Você está há ${periodo} sem avançar em nenhuma atividade da pesquisa.`;
+    }
+
+    // 2. Alertas de Prazos do Quadro de Atividades
+    if (stage === "ATIVIDADE_ATRASADA" || stage === "MARCO_ATRASADO") {
+      return `Você perdeu o prazo da atividade '${titulo}'.`;
+    }
+    if (stage === "ATIVIDADE_HOJE") {
+      return `Atenção: O prazo da atividade '${titulo}' vence hoje!`;
+    }
+    if (stage === "ATIVIDADE_AMANHA" || stage === "MARCO_AMANHA") {
+      return `O prazo da atividade '${titulo}' vence amanhã!`;
+    }
+    if (stage === "ATIVIDADE_SEMANA" || stage === "MARCO_SEMANA") {
+      return `O prazo da atividade '${titulo}' está próximo (em uma semana).`;
+    }
+    if (stage === "ATIVIDADE_NAO_INICIADA") {
+      return `Você ainda não iniciou a atividade '${titulo}', que vence em breve. Comece o quanto antes!`;
+    }
+    if (stage === "SUBTAREFA_ATRASADA") {
+      return `Você possui uma subtarefa atrasada na atividade '${titulo}'.`;
+    }
+    if (stage === "SEM_ATIVIDADES_PLANEJADAS") {
+      return "Você ainda não planejou suas atividades no Quadro de Atividades.";
+    }
+    if (stage === "ATIVIDADE_CONCLUIDA") {
+      return `Você concluiu a atividade '${titulo}'.`;
+    }
+
+    // 3. Alertas de Produção Acadêmica
     if (msgBase.includes("entregar em uma semana")) {
       return `O prazo de entrega para '${titulo}' está próximo!`;
     }
@@ -136,7 +180,15 @@ export function formatarMensagemAlertaParaAluno(
     if (msgBase.includes("trabalho atrasado")) {
       return `Você perdeu o prazo de entrega para '${titulo}'.`;
     }
+
     return msgBase;
+  }
+
+  // Alertas de Inatividade sem metadados
+  if (msg.includes("sem avançar em nenhuma atividade")) {
+    const matchPeriodo = msg.match(/(1 semana|15 dias|1 mês)/i);
+    const per = matchPeriodo ? matchPeriodo[1] : "algum tempo";
+    return `Você está há ${per} sem avançar em nenhuma atividade da pesquisa.`;
   }
 
   // Alertas de Reunião
@@ -341,6 +393,295 @@ export async function garantirAlertasAluno(alunoId: string, alunoNome: string) {
         }
       }
     }
+
+    // 3. ALERTAS DO QUADRO DE ATIVIDADES E ROADMAP
+    try {
+      // 3.1 ALERTA DE INATIVIDADE (Aluno há muito tempo sem avançar em nenhuma atividade)
+      const ultimosAvancos = await prisma.$queryRawUnsafe<Array<{ ult_data: Date | string | null }>>(
+        `SELECT GREATEST(
+           MAX("prazoRealizado"::timestamp),
+           MAX(CASE WHEN porcentagem > 0 THEN "atualizadoEm" ELSE NULL END),
+           MAX("criadoEm")
+         ) as ult_data
+         FROM marco_roadmap
+         WHERE "alunoId" = $1;`,
+        aluno.id
+      );
+
+      const ultimasSubtarefas = await prisma.$queryRawUnsafe<Array<{ ult_sub: Date | string | null }>>(
+        `SELECT MAX("concluidaEm") as ult_sub
+         FROM tarefa
+         WHERE "alunoId" = $1 AND status = 'CONCLUIDA' AND "marcoId" IS NOT NULL;`,
+        aluno.id
+      );
+
+      let dataReferenciaAvanco: Date | null = null;
+      if (ultimosAvancos[0]?.ult_data) {
+        dataReferenciaAvanco = new Date(ultimosAvancos[0].ult_data);
+      }
+      if (ultimasSubtarefas[0]?.ult_sub) {
+        const dSub = new Date(ultimasSubtarefas[0].ult_sub);
+        if (!dataReferenciaAvanco || dSub > dataReferenciaAvanco) {
+          dataReferenciaAvanco = dSub;
+        }
+      }
+      if (!dataReferenciaAvanco) {
+        dataReferenciaAvanco = new Date(aluno.dataInicio);
+      }
+
+      const diffMsInat = agora.getTime() - dataReferenciaAvanco.getTime();
+      const diasSemAvanco = Math.floor(diffMsInat / (1000 * 60 * 60 * 24));
+
+      let inatividadeStage: "1 semana" | "15 dias" | "1 mês" | null = null;
+      if (diasSemAvanco >= 30) {
+        inatividadeStage = "1 mês";
+      } else if (diasSemAvanco >= 15) {
+        inatividadeStage = "15 dias";
+      } else if (diasSemAvanco >= 7) {
+        inatividadeStage = "1 semana";
+      }
+
+      if (inatividadeStage) {
+        const identificadorInat = `INATIVIDADE_ATIVIDADES ||| ${inatividadeStage}`;
+        const alertaExistente = await prisma.alerta.findFirst({
+          where: {
+            alunoId: aluno.id,
+            mensagem: { contains: identificadorInat },
+          },
+          orderBy: { criadoEm: "desc" },
+        });
+
+        const alertouNesteCiclo =
+          alertaExistente &&
+          (dataReferenciaAvanco ? new Date(alertaExistente.criadoEm) >= dataReferenciaAvanco : true);
+
+        if (!alertouNesteCiclo) {
+          // Arquiva alertas de inatividade anteriores ao subir de estágio
+          await prisma.alerta.updateMany({
+            where: {
+              alunoId: aluno.id,
+              mensagem: { contains: "INATIVIDADE_ATIVIDADES" },
+              resolvido: false,
+            },
+            data: { resolvido: true },
+          });
+
+          const msgBase = `${aluno.nome} está há ${inatividadeStage} sem avançar em nenhuma atividade da pesquisa.`;
+          const mensagemCompleta = `${msgBase} ||| ${aluno.nome} ||| inatividade ||| INATIVIDADE_ATIVIDADES ||| ${inatividadeStage}`;
+
+          await prisma.alerta.create({
+            data: {
+              alunoId: aluno.id,
+              tipo: "TAREFA_ATRASADA",
+              mensagem: mensagemCompleta,
+            },
+          });
+        }
+      } else if (diasSemAvanco < 7) {
+        // Se avançou recentemente, resolve alertas anteriores de inatividade pendentes
+        await prisma.alerta.updateMany({
+          where: {
+            alunoId: aluno.id,
+            mensagem: { contains: "INATIVIDADE_ATIVIDADES" },
+            resolvido: false,
+          },
+          data: { resolvido: true },
+        });
+      }
+
+      // 3.2 ALERTAS DE PRAZOS DAS ATIVIDADES DO QUADRO
+      interface MarcoRow {
+        id: string;
+        titulo: string;
+        prazoPlanejado: string | Date;
+        status: string;
+        porcentagem: number;
+      }
+      const marcos = await prisma.$queryRawUnsafe<MarcoRow[]>(
+        `SELECT id, titulo, "prazoPlanejado", status, porcentagem FROM marco_roadmap WHERE "alunoId" = $1 ORDER BY ordem ASC;`,
+        aluno.id
+      );
+
+      // Se o aluno está ativo há mais de 7 dias e não possui nenhuma atividade cadastrada
+      if (marcos.length === 0) {
+        const diasDesdeInicio = Math.floor(
+          (agora.getTime() - new Date(aluno.dataInicio).getTime()) / (1000 * 60 * 60 * 24)
+        );
+        if (diasDesdeInicio >= 7) {
+          const identificadorSemAtiv = "SEM_ATIVIDADES_PLANEJADAS";
+          const alertaExistente = await prisma.alerta.findFirst({
+            where: {
+              alunoId: aluno.id,
+              mensagem: { contains: identificadorSemAtiv },
+            },
+          });
+          if (!alertaExistente) {
+            const msgBase = `${aluno.nome} ainda não possui nenhuma atividade planejada no Quadro de Atividades.`;
+            await prisma.alerta.create({
+              data: {
+                alunoId: aluno.id,
+                tipo: "PRAZO_PROXIMO",
+                mensagem: `${msgBase} ||| Quadro de Atividades ||| sem_atividades ||| SEM_ATIVIDADES_PLANEJADAS`,
+              },
+            });
+          }
+        }
+      } else {
+        // Se já possui atividades, garante a resolução de alerta de quadro vazio
+        await prisma.alerta.updateMany({
+          where: {
+            alunoId: aluno.id,
+            mensagem: { contains: "SEM_ATIVIDADES_PLANEJADAS" },
+            resolvido: false,
+          },
+          data: { resolvido: true },
+        });
+
+        const hojeZero = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
+
+        for (const marco of marcos) {
+          // Se concluída, resolve qualquer alerta pendente sobre esta atividade
+          if (marco.status === "CONCLUIDO" || Number(marco.porcentagem) === 100) {
+            await prisma.alerta.updateMany({
+              where: {
+                alunoId: aluno.id,
+                mensagem: { contains: marco.id },
+                resolvido: false,
+              },
+              data: { resolvido: true },
+            });
+            continue;
+          }
+
+          if (!marco.prazoPlanejado) continue;
+
+          let prazoAtividade: Date;
+          if (typeof marco.prazoPlanejado === "string") {
+            const [ano, mes, dia] = marco.prazoPlanejado.split("T")[0].split("-").map(Number);
+            prazoAtividade = new Date(ano, mes - 1, dia);
+          } else {
+            const d = new Date(marco.prazoPlanejado);
+            prazoAtividade = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+          }
+
+          const diffMs = prazoAtividade.getTime() - hojeZero.getTime();
+          const diffDias = Math.round(diffMs / (1000 * 60 * 60 * 24));
+          const dataFmt = prazoAtividade.toLocaleDateString("pt-BR", {
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+          });
+
+          let stage:
+            | "ATIVIDADE_ATRASADA"
+            | "ATIVIDADE_HOJE"
+            | "ATIVIDADE_AMANHA"
+            | "ATIVIDADE_SEMANA"
+            | "ATIVIDADE_NAO_INICIADA"
+            | null = null;
+          let tipoAlerta: "TAREFA_ATRASADA" | "PRAZO_PROXIMO" = "PRAZO_PROXIMO";
+          let msgBase = "";
+
+          if (diffDias < 0) {
+            stage = "ATIVIDADE_ATRASADA";
+            tipoAlerta = "TAREFA_ATRASADA";
+            msgBase = `${aluno.nome} está com a atividade '${marco.titulo}' atrasada (prazo era ${dataFmt}).`;
+          } else if (diffDias === 0) {
+            stage = "ATIVIDADE_HOJE";
+            tipoAlerta = "PRAZO_PROXIMO";
+            msgBase = `${aluno.nome} tem a atividade '${marco.titulo}' com prazo para hoje.`;
+          } else if (diffDias === 1) {
+            stage = "ATIVIDADE_AMANHA";
+            tipoAlerta = "PRAZO_PROXIMO";
+            msgBase = `${aluno.nome} tem a atividade '${marco.titulo}' para concluir amanhã (${dataFmt}).`;
+          } else if (diffDias <= 7) {
+            if (Number(marco.porcentagem) === 0 || marco.status === "NAO_INICIADO") {
+              stage = "ATIVIDADE_NAO_INICIADA";
+              tipoAlerta = "PRAZO_PROXIMO";
+              msgBase = `${aluno.nome} ainda não iniciou a atividade '${marco.titulo}', que vence em ${diffDias} dias (${dataFmt}).`;
+            } else {
+              stage = "ATIVIDADE_SEMANA";
+              tipoAlerta = "PRAZO_PROXIMO";
+              msgBase = `${aluno.nome} tem a atividade '${marco.titulo}' com prazo para a próxima semana (${dataFmt}).`;
+            }
+          }
+
+          if (stage) {
+            const identificador = `${marco.id} ||| ${stage}`;
+            const alertaExistente = await prisma.alerta.findFirst({
+              where: {
+                alunoId: aluno.id,
+                mensagem: { contains: identificador },
+              },
+            });
+
+            if (!alertaExistente) {
+              await prisma.alerta.updateMany({
+                where: {
+                  alunoId: aluno.id,
+                  mensagem: { contains: marco.id },
+                  resolvido: false,
+                },
+                data: { resolvido: true },
+              });
+
+              const mensagemCompleta = `${msgBase} ||| ${marco.titulo} ||| ${marco.id} ||| ${stage}`;
+
+              await prisma.alerta.create({
+                data: {
+                  alunoId: aluno.id,
+                  tipo: tipoAlerta,
+                  mensagem: mensagemCompleta,
+                },
+              });
+            }
+          }
+        }
+      }
+
+      // 3.3 ALERTAS DE SUBTAREFAS VINCULADAS ATRASADAS
+      const subtarefasAtrasadas = await prisma.$queryRawUnsafe<
+        Array<{
+          tarefaId: string;
+          tarefaTitulo: string;
+          prazo: Date;
+          marcoId: string;
+          marcoTitulo: string;
+        }>
+      >(
+        `SELECT t.id as "tarefaId", t.titulo as "tarefaTitulo", t.prazo, m.id as "marcoId", m.titulo as "marcoTitulo"
+         FROM tarefa t
+         JOIN marco_roadmap m ON m.id = t."marcoId"
+         WHERE t."alunoId" = $1 AND t.status = 'ABERTA' AND t.prazo IS NOT NULL AND t.prazo < $2;`,
+        aluno.id,
+        agora
+      );
+
+      for (const sub of subtarefasAtrasadas) {
+        const identificadorSub = `${sub.tarefaId} ||| SUBTAREFA_ATRASADA`;
+        const alertaExistente = await prisma.alerta.findFirst({
+          where: {
+            alunoId: aluno.id,
+            mensagem: { contains: identificadorSub },
+          },
+        });
+
+        if (!alertaExistente) {
+          const msgBase = `${aluno.nome} possui a subtarefa '${sub.tarefaTitulo}' atrasada na atividade '${sub.marcoTitulo}'.`;
+          const mensagemCompleta = `${msgBase} ||| ${sub.marcoTitulo} ||| ${sub.tarefaId} ||| SUBTAREFA_ATRASADA`;
+
+          await prisma.alerta.create({
+            data: {
+              alunoId: aluno.id,
+              tipo: "TAREFA_ATRASADA",
+              mensagem: mensagemCompleta,
+            },
+          });
+        }
+      }
+    } catch {
+      // Silencioso se tabela marco_roadmap não existir ainda
+    }
   } catch (err) {
     console.error(`Erro ao garantir alertas para aluno ${alunoId}:`, err);
   } finally {
@@ -447,8 +788,20 @@ export async function verificarEObterAlertasProfessor(professorId: string): Prom
     const alertasUnicos = Array.from(alertasUnicosMap.values()).slice(0, 10);
 
     const itensAlerta = alertasUnicos.map((a) => {
-      const link = `/alunos/${a.alunoId}`;
-      const linkRotulo = "Acompanhar orientando";
+      let link = `/alunos/${a.alunoId}`;
+      let linkRotulo = "Acompanhar orientando";
+
+      if (
+        a.mensagem.includes("||| ATIVIDADE_") ||
+        a.mensagem.includes("||| INATIVIDADE_") ||
+        a.mensagem.includes("||| SUBTAREFA_") ||
+        a.mensagem.includes("||| SEM_ATIVIDADES_") ||
+        a.mensagem.includes("||| MARCO_") ||
+        a.mensagem.includes("sem avançar em nenhuma atividade")
+      ) {
+        link = `/roadmap?alunoId=${a.alunoId}`;
+        linkRotulo = "Ver Quadro de Atividades";
+      }
 
       return {
         id: a.id,
@@ -604,6 +957,21 @@ export async function obterNotificacoesAluno(alunoId: string): Promise<Notificac
           };
         }
 
+        if (r.mensagem.includes("||| QUADRO_ATIVIDADE |||")) {
+          const parts = r.mensagem.split("|||").map((s) => s.trim());
+          return {
+            id: r.id,
+            tipo: "NOVA_ATIVIDADE",
+            mensagem: parts[0],
+            alunoId: r.alunoId,
+            alunoNome: aluno?.nome ?? "",
+            criadoEm: new Date(r.criadoEm).toISOString(),
+            resolvido: r.lida,
+            link: "/roadmap",
+            linkRotulo: "Ver atividades",
+          };
+        }
+
         return {
           id: r.id,
           tipo: "NOVA_MARCACAO",
@@ -621,7 +989,17 @@ export async function obterNotificacoesAluno(alunoId: string): Promise<Notificac
       let link = "/alertas";
       let linkRotulo = "Acessar";
 
-      if (a.mensagem.includes("|||")) {
+      if (
+        a.mensagem.includes("||| ATIVIDADE_") ||
+        a.mensagem.includes("||| INATIVIDADE_") ||
+        a.mensagem.includes("||| SUBTAREFA_") ||
+        a.mensagem.includes("||| SEM_ATIVIDADES_") ||
+        a.mensagem.includes("||| MARCO_") ||
+        a.mensagem.includes("sem avançar em nenhuma atividade")
+      ) {
+        link = "/roadmap";
+        linkRotulo = "Ver Quadro de Atividades";
+      } else if (a.mensagem.includes("|||")) {
         const parts = a.mensagem.split("|||").map((s) => s.trim());
         const producaoId = parts[2];
         link = producaoId ? `/producao/${producaoId}` : "/producao";
